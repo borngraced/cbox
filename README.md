@@ -47,9 +47,12 @@ cbox has two backends that provide the same isolation guarantees:
 
 ### Container backend (macOS, Linux fallback)
 - **Docker or Podman** — auto-detected, no configuration needed
-- **OverlayFS inside container** — same upper-dir strategy, so `cbox diff` and `cbox merge` work identically
+- **Auto-built base image** — on first run, cbox builds a `cbox-base` image with common tools (bash, zsh, fish, git, vim, curl, build-essential) and **Claude Code** pre-installed
+- **OverlayFS via tmpfs** — uses a tmpfs-backed overlay inside the container; falls back to copy-based isolation on macOS (virtiofs incompatibility)
+- **Claude Code auth persists** — `~/.claude` and `~/.claude.json` are automatically mounted into the container, so you never need to re-login
 - **`--network=none`** for deny mode, default bridge for allow mode
 - **Resource limits** via `--memory`, `--cpu-quota`, `--pids-limit`
+- **Custom images** — use `--image` or set `sandbox.image` in config to bring your own toolchain
 
 The backend is selected automatically (`--backend auto` is the default):
 - Linux with user namespaces → native
@@ -99,17 +102,20 @@ With `--persist`, the session's overlay data is kept after exit so you can re-en
 ### Examples
 
 ```bash
-# Drop into a sandboxed shell
-cbox run
+# Drop into a sandboxed shell (with Claude Code available)
+cbox run --network allow
+
+# Run Claude Code directly
+cbox run --network allow -- claude
 
 # Run a specific command
 cbox run -- python3 train.py
 
-# Claude Code with network access to Anthropic API
-cbox run --network allow -- claude
-
 # Named persistent session with resource limits
 cbox run --session experiment --persist --memory 2G --cpu 100% -- bash
+
+# Use a custom container image
+cbox run --image myuser/cbox-dev:latest
 
 # Force container backend on Linux
 cbox run --backend container -- npm start
@@ -122,6 +128,22 @@ cbox merge --pick
 cbox destroy
 ```
 
+### Custom container image
+
+The default base image includes common tools and Claude Code. For a custom setup, use the included `Dockerfile` as a starting point:
+
+```bash
+# Build your personal image
+docker build -t cbox-dev .
+
+# Use it
+cbox run --image cbox-dev --network allow
+
+# Or set permanently in cbox.toml:
+# [sandbox]
+# image = "cbox-dev"
+```
+
 ## Configuration
 
 cbox uses layered config resolution:
@@ -132,6 +154,8 @@ cbox uses layered config resolution:
 
 ```toml
 [sandbox]
+# Container image (ignored on native backend)
+image = "ubuntu:24.04"
 ro_mounts = ["/usr", "/lib", "/lib64", "/bin", "/sbin", "/etc"]
 blocked_syscalls = []
 merge_exclude = [
@@ -173,7 +197,7 @@ bins/cbox/          CLI binary (clap, subcommand dispatch)
 crates/
   cbox-core/        Config, session store, capability detection, SandboxBackend trait
   cbox-sandbox/     Native backend: namespace setup, seccomp-BPF, cgroups v2
-  cbox-container/   Container backend: Docker/Podman runtime detection
+  cbox-container/   Container backend: Docker/Podman, auto-built base image
   cbox-overlay/     OverlayFS mount/diff/merge, whiteout detection
   cbox-network/     Veth pairs, iptables rules, DNS
   cbox-adapter/     AgentAdapter trait, generic + claude adapters

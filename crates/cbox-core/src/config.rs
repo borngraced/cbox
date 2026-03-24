@@ -20,6 +20,10 @@ pub struct CboxConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SandboxConfig {
+    /// Container image to use for the container backend (e.g. "ubuntu:24.04")
+    #[serde(default = "default_image")]
+    pub image: String,
+
     /// Directories to mount read-only inside the sandbox
     #[serde(default = "default_ro_mounts")]
     pub ro_mounts: Vec<String>,
@@ -41,9 +45,14 @@ pub struct SandboxConfig {
     pub merge_exclude: Vec<String>,
 }
 
+fn default_image() -> String {
+    "ubuntu:24.04".to_string()
+}
+
 impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
+            image: default_image(),
             ro_mounts: default_ro_mounts(),
             rw_mounts: vec![],
             overlay_dirs: vec![],
@@ -227,6 +236,9 @@ impl CboxConfig {
     /// Merge another config on top of this one.
     /// Non-default values in `other` override values in `self`.
     fn merge(&mut self, other: Self) {
+        if other.sandbox.image != default_image() {
+            self.sandbox.image = other.sandbox.image;
+        }
         if other.sandbox.ro_mounts != default_ro_mounts() {
             self.sandbox.ro_mounts = other.sandbox.ro_mounts;
         }
@@ -270,7 +282,6 @@ impl CboxConfig {
             self.adapter.env_passthrough = other.adapter.env_passthrough;
         }
     }
-
 
     /// Parse a memory string like "4G" or "512M" into bytes.
     pub fn parse_memory_bytes(s: &str) -> Result<u64, CoreError> {
@@ -333,9 +344,18 @@ mod tests {
 
     #[test]
     fn test_parse_memory() {
-        assert_eq!(CboxConfig::parse_memory_bytes("4G").unwrap(), 4 * 1024 * 1024 * 1024);
-        assert_eq!(CboxConfig::parse_memory_bytes("512M").unwrap(), 512 * 1024 * 1024);
-        assert_eq!(CboxConfig::parse_memory_bytes("1024K").unwrap(), 1024 * 1024);
+        assert_eq!(
+            CboxConfig::parse_memory_bytes("4G").unwrap(),
+            4 * 1024 * 1024 * 1024
+        );
+        assert_eq!(
+            CboxConfig::parse_memory_bytes("512M").unwrap(),
+            512 * 1024 * 1024
+        );
+        assert_eq!(
+            CboxConfig::parse_memory_bytes("1024K").unwrap(),
+            1024 * 1024
+        );
     }
 
     #[test]

@@ -1,7 +1,7 @@
 pub mod error;
-pub mod renderer;
 pub mod picker;
+pub mod renderer;
 
 pub use error::DiffError;
-pub use renderer::DiffRenderer;
 pub use picker::FilePicker;
+pub use renderer::DiffRenderer;

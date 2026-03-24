@@ -1,9 +1,15 @@
-pub mod error;
-pub mod sandbox;
+#[cfg(target_os = "linux")]
 pub mod cgroup;
-pub mod seccomp;
+#[cfg(target_os = "linux")]
 pub mod cleanup;
+pub mod error;
+#[cfg(target_os = "linux")]
+pub mod sandbox;
+#[cfg(target_os = "linux")]
+pub mod seccomp;
 
-pub use error::SandboxError;
-pub use sandbox::Sandbox;
+#[cfg(target_os = "linux")]
 pub use cleanup::CleanupStack;
+pub use error::SandboxError;
+#[cfg(target_os = "linux")]
+pub use sandbox::Sandbox;

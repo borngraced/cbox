@@ -25,7 +25,11 @@ pub fn execute(stat: bool, name_only: bool, session_query: Option<String>) -> Re
     let changes = filter::filter_excluded(changes, &config.sandbox.merge_exclude);
 
     if changes.is_empty() {
-        println!("{} No changes in session {}", "cbox".green().bold(), session.display_name().cyan());
+        println!(
+            "{} No changes in session {}",
+            "cbox".green().bold(),
+            session.display_name().cyan()
+        );
         return Ok(());
     }
 

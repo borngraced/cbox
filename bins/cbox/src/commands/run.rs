@@ -1,11 +1,13 @@
-use std::collections::HashMap;
 use anyhow::Result;
 use colored::Colorize;
+use std::collections::HashMap;
 
 use cbox_adapter::AdapterRegistry;
+use cbox_container::{ContainerBackend, ContainerRuntime};
+#[cfg(target_os = "linux")]
 use cbox_core::capability::Capabilities;
 use cbox_core::{BackendKind, CboxConfig, SandboxBackend, Session, SessionStore};
-use cbox_container::{ContainerBackend, ContainerRuntime};
+#[cfg(target_os = "linux")]
 use cbox_sandbox::Sandbox;
 
 #[allow(clippy::too_many_arguments)]
@@ -18,16 +20,22 @@ pub fn execute(
     cpu: Option<String>,
     dry_run: bool,
     backend_str: String,
+    image: Option<String>,
     cmd: Vec<String>,
 ) -> Result<()> {
+    let backend_kind = select_backend(&backend_str, dry_run)?;
+
     let cmd = if cmd.is_empty() {
-        let shell = std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string());
+        let shell = match backend_kind {
+            // For containers, use a sentinel that the entrypoint resolves to the
+            // image's $SHELL (set via ENV in Dockerfile), falling back to /bin/bash.
+            BackendKind::Container => ContainerBackend::default_shell_sentinel().to_string(),
+            _ => std::env::var("SHELL").unwrap_or_else(|_| "/bin/sh".to_string()),
+        };
         vec![shell]
     } else {
         cmd
     };
-
-    let backend_kind = select_backend(&backend_str, dry_run)?;
 
     let cwd = std::env::current_dir()?;
     let mut config = CboxConfig::find_and_load(&cwd)?;
@@ -38,6 +46,9 @@ pub fn execute(
     }
     if let Some(c) = cpu {
         config.resources.cpu = c;
+    }
+    if let Some(img) = image {
+        config.sandbox.image = img;
     }
 
     let registry = AdapterRegistry::new();
@@ -57,24 +68,33 @@ pub fn execute(
         }
     }
 
-    adapter
-        .validate(&config)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    // Skip adapter validation for container backend — tools like claude are
+    // inside the container image, not on the host. The adapter's validate()
+    // checks for host binaries which won't exist on macOS.
+    if backend_kind != BackendKind::Container {
+        adapter
+            .validate(&config)
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
+    }
 
     let mut env = HashMap::new();
     adapter
         .prepare_env(&mut env, &config)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    let sandbox_cmd = adapter
-        .build_command(&cmd, &config)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    // For container backend, tools are in the image on PATH — use the command
+    // as-is without adapter resolution (which looks for host binaries).
+    let full_cmd = if backend_kind == BackendKind::Container {
+        cmd.clone()
+    } else {
+        let sandbox_cmd = adapter
+            .build_command(&cmd, &config)
+            .map_err(|e| anyhow::anyhow!("{}", e))?;
 
-    for (k, v) in sandbox_cmd.env {
-        env.insert(k, v);
-    }
+        for (k, v) in sandbox_cmd.env {
+            env.insert(k, v);
+        }
 
-    let full_cmd = {
         let mut c = vec![sandbox_cmd.program];
         c.extend(sandbox_cmd.args);
         c
@@ -100,20 +120,23 @@ pub fn execute(
     );
 
     let result = match backend_kind {
+        #[cfg(target_os = "linux")]
         BackendKind::Native => {
             let caps = Capabilities::detect();
             if !dry_run {
-                caps.check_minimum()
-                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+                caps.check_minimum().map_err(|e| anyhow::anyhow!("{}", e))?;
             }
             let sandbox = Sandbox::new(session, config, caps);
             sandbox
                 .run(&full_cmd, env, dry_run)
                 .map_err(|e| anyhow::anyhow!("{}", e))?
         }
+        #[cfg(not(target_os = "linux"))]
+        BackendKind::Native => {
+            anyhow::bail!("native backend is only available on Linux");
+        }
         BackendKind::Container => {
-            let runtime = ContainerRuntime::detect()
-                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            let runtime = ContainerRuntime::detect().map_err(|e| anyhow::anyhow!("{}", e))?;
             let backend = ContainerBackend::new(session, config, runtime);
             backend
                 .run(&full_cmd, env, dry_run)
@@ -169,8 +192,6 @@ fn auto_detect_backend() -> Result<BackendKind> {
         if ContainerRuntime::detect().is_ok() {
             return Ok(BackendKind::Container);
         }
-        anyhow::bail!(
-            "no container runtime found. Install Docker Desktop or Podman."
-        );
+        anyhow::bail!("no container runtime found. Install Docker Desktop or Podman.");
     }
 }

@@ -32,9 +32,7 @@ pub struct NetworkSetup;
 
 impl NetworkSetup {
     /// Resolve DNS for all whitelist entries while we still have host DNS.
-    pub fn resolve_whitelist(
-        hosts: &[String],
-    ) -> Result<Vec<ResolvedHost>, NetworkError> {
+    pub fn resolve_whitelist(hosts: &[String]) -> Result<Vec<ResolvedHost>, NetworkError> {
         let mut resolved = Vec::new();
         for host_str in hosts {
             let (host, port) = if let Some((h, p)) = host_str.rsplit_once(':') {
@@ -78,18 +76,30 @@ impl NetworkSetup {
         let peer_tmp = format!("{}_p", host_name);
         let host_ip = format!("10.200.{}.1/30", subnet_index);
 
-        run_cmd("ip", &[
-            "link", "add", host_name, "type", "veth", "peer", "name", &peer_tmp,
-        ])?;
+        run_cmd(
+            "ip",
+            &[
+                "link", "add", host_name, "type", "veth", "peer", "name", &peer_tmp,
+            ],
+        )?;
         // Move peer into child's netns, then rename to eth0 inside
-        run_cmd("ip", &[
-            "link", "set", &peer_tmp, "netns", &child_pid.to_string(),
-        ])?;
+        run_cmd(
+            "ip",
+            &["link", "set", &peer_tmp, "netns", &child_pid.to_string()],
+        )?;
         // Rename inside the child's netns
-        run_cmd("nsenter", &[
-            &format!("--net=/proc/{}/ns/net", child_pid),
-            "ip", "link", "set", &peer_tmp, "name", "eth0",
-        ])?;
+        run_cmd(
+            "nsenter",
+            &[
+                &format!("--net=/proc/{}/ns/net", child_pid),
+                "ip",
+                "link",
+                "set",
+                &peer_tmp,
+                "name",
+                "eth0",
+            ],
+        )?;
         run_cmd("ip", &["addr", "add", &host_ip, "dev", host_name])?;
         run_cmd("ip", &["link", "set", host_name, "up"])?;
 
@@ -101,7 +111,10 @@ impl NetworkSetup {
     }
 
     /// Configure network inside the sandbox (called from child process).
-    pub fn configure_child_network(subnet_index: u8, dns_servers: &[String]) -> Result<(), NetworkError> {
+    pub fn configure_child_network(
+        subnet_index: u8,
+        dns_servers: &[String],
+    ) -> Result<(), NetworkError> {
         let ip = format!("10.200.{}.2/30", subnet_index);
         let gateway = format!("10.200.{}.1", subnet_index);
 
@@ -203,10 +216,7 @@ impl NetworkSetup {
 
         match config.mode {
             NetworkMode::Allow => {
-                let rule = format!(
-                    "iptables -A FORWARD -i {} -j ACCEPT",
-                    host_veth
-                );
+                let rule = format!("iptables -A FORWARD -i {} -j ACCEPT", host_veth);
                 run_iptables_rule(&rule)?;
                 rules.push(rule);
             }
@@ -219,10 +229,7 @@ impl NetworkSetup {
                                 host_veth, ip, port
                             )
                         } else {
-                            format!(
-                                "iptables -A FORWARD -i {} -d {} -j ACCEPT",
-                                host_veth, ip
-                            )
+                            format!("iptables -A FORWARD -i {} -d {} -j ACCEPT", host_veth, ip)
                         };
                         run_iptables_rule(&rule)?;
                         rules.push(rule);
@@ -238,20 +245,14 @@ impl NetworkSetup {
                     rules.push(rule);
                 }
 
-                let drop_rule = format!(
-                    "iptables -A FORWARD -i {} -j DROP",
-                    host_veth
-                );
+                let drop_rule = format!("iptables -A FORWARD -i {} -j DROP", host_veth);
                 run_iptables_rule(&drop_rule)?;
                 rules.push(drop_rule);
             }
         }
 
         let subnet = format!("10.200.{}.0/30", config.subnet_index);
-        let nat_rule = format!(
-            "iptables -t nat -A POSTROUTING -s {} -j MASQUERADE",
-            subnet
-        );
+        let nat_rule = format!("iptables -t nat -A POSTROUTING -s {} -j MASQUERADE", subnet);
         run_iptables_rule(&nat_rule)?;
         rules.push(nat_rule);
 
@@ -282,10 +283,8 @@ impl NetworkSetup {
 
     /// Allocate a subnet index that doesn't conflict with existing sessions.
     pub fn allocate_subnet_index(sessions: &[Session]) -> u8 {
-        let used: std::collections::HashSet<u8> = sessions
-            .iter()
-            .filter_map(|s| s.subnet_index)
-            .collect();
+        let used: std::collections::HashSet<u8> =
+            sessions.iter().filter_map(|s| s.subnet_index).collect();
         for i in 1..=254 {
             if !used.contains(&i) {
                 return i;
@@ -335,7 +334,10 @@ mod tests {
         assert_eq!(NetworkSetup::veth_host_name("abcdef"), "cbox_abcdef");
         assert_eq!(NetworkSetup::veth_host_name("a"), "cbox_a");
         // Full UUID-style input
-        assert_eq!(NetworkSetup::veth_host_name("550e8400-e29b-41d4-a716-446655440000"), "cbox_550e84");
+        assert_eq!(
+            NetworkSetup::veth_host_name("550e8400-e29b-41d4-a716-446655440000"),
+            "cbox_550e84"
+        );
     }
 
     #[test]

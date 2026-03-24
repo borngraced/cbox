@@ -89,10 +89,10 @@ pub fn apply_seccomp_filter(extra_blocked: &[String]) -> Result<(), SandboxError
 fn build_bpf_denylist(blocked: &[&str]) -> Result<Vec<libc::sock_filter>, SandboxError> {
     // Verify architecture is x86_64 (AUDIT_ARCH_X86_64 = 0xC000003E), kill if not
     let mut filter: Vec<libc::sock_filter> = vec![
-        bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 4),                    // seccomp_data.arch
+        bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 4), // seccomp_data.arch
         bpf_jump(BPF_JMP | BPF_JEQ | BPF_K, 0xC000003E, 1, 0),
         bpf_stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
-        bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 0),                    // seccomp_data.nr
+        bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 0), // seccomp_data.nr
     ];
 
     let syscall_numbers = resolve_syscall_numbers(blocked);
@@ -104,7 +104,10 @@ fn build_bpf_denylist(blocked: &[&str]) -> Result<Vec<libc::sock_filter>, Sandbo
     }
 
     filter.push(bpf_stmt(BPF_RET | BPF_K, SECCOMP_RET_ALLOW));
-    filter.push(bpf_stmt(BPF_RET | BPF_K, SECCOMP_RET_ERRNO | (libc::EPERM as u32)));
+    filter.push(bpf_stmt(
+        BPF_RET | BPF_K,
+        SECCOMP_RET_ERRNO | (libc::EPERM as u32),
+    ));
 
     Ok(filter)
 }

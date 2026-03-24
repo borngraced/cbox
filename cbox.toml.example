@@ -2,6 +2,10 @@
 # Place this file in your project root.
 
 [sandbox]
+# Container image for the container backend (ignored on native Linux backend).
+# Use a custom image with your preferred shell and tools pre-installed.
+# Example: image = "myuser/cbox-dev:latest"
+image = "ubuntu:24.04"
 # Directories mounted read-only inside the sandbox
 ro_mounts = ["/usr", "/lib", "/lib64", "/bin", "/sbin", "/etc"]
 # Extra directories to overlay (read-write via overlayfs)

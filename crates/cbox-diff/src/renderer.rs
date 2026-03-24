@@ -10,9 +10,7 @@ pub struct DiffRenderer;
 
 impl DiffRenderer {
     /// Render a stat summary (like git diff --stat).
-    pub fn render_stat(
-        changes: &[cbox_overlay::OverlayChange],
-    ) -> String {
+    pub fn render_stat(changes: &[cbox_overlay::OverlayChange]) -> String {
         let mut output = String::new();
         let mut added_files = 0;
         let mut modified_files = 0;
@@ -65,10 +63,7 @@ impl DiffRenderer {
         for change in changes {
             match change.kind {
                 cbox_overlay::ChangeKind::Added => {
-                    output.push_str(&format!(
-                        "{}\n",
-                        "--- /dev/null".to_string().red()
-                    ));
+                    output.push_str(&format!("{}\n", "--- /dev/null".to_string().red()));
                     output.push_str(&format!(
                         "{}\n",
                         format!("+++ b/{}", change.path.display()).green()
@@ -78,10 +73,7 @@ impl DiffRenderer {
                             output.push_str(&format!("{}\n", format!("+{}", line).green()));
                         }
                     } else {
-                        output.push_str(&format!(
-                            "{}\n",
-                            "[binary file]".dimmed()
-                        ));
+                        output.push_str(&format!("{}\n", "[binary file]".dimmed()));
                     }
                     output.push('\n');
                 }
@@ -114,7 +106,9 @@ impl DiffRenderer {
                             for change in diff.iter_changes(op) {
                                 let line = match change.tag() {
                                     ChangeTag::Delete => {
-                                        format!("-{}", change.value().trim_end_matches('\n')).red().to_string()
+                                        format!("-{}", change.value().trim_end_matches('\n'))
+                                            .red()
+                                            .to_string()
                                     }
                                     ChangeTag::Insert => {
                                         format!("+{}", change.value().trim_end_matches('\n'))
@@ -138,10 +132,7 @@ impl DiffRenderer {
                         "{}\n",
                         format!("--- a/{}", change.path.display()).red()
                     ));
-                    output.push_str(&format!(
-                        "{}\n",
-                        "+++ /dev/null".green()
-                    ));
+                    output.push_str(&format!("{}\n", "+++ /dev/null".green()));
                     if let Ok(content) = fs::read_to_string(&lower_path) {
                         for line in content.lines() {
                             output.push_str(&format!("{}\n", format!("-{}", line).red()));
@@ -158,7 +149,7 @@ impl DiffRenderer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use cbox_overlay::{OverlayChange, ChangeKind};
+    use cbox_overlay::{ChangeKind, OverlayChange};
     use std::path::PathBuf;
 
     #[test]

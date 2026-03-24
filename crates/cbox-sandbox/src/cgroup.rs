@@ -84,11 +84,7 @@ impl CgroupSetup {
             }
 
             if let Err(e) = fs::remove_dir(cgroup_path) {
-                warn!(
-                    "failed to remove cgroup {}: {}",
-                    cgroup_path.display(),
-                    e
-                );
+                warn!("failed to remove cgroup {}: {}", cgroup_path.display(), e);
             } else {
                 info!("cgroup removed: {}", cgroup_path.display());
             }

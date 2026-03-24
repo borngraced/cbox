@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use cbox_core::{SessionStore, SessionStatus};
+use cbox_core::{SessionStatus, SessionStore};
 
 pub fn execute(name: Option<String>, session_query: Option<String>) -> Result<()> {
     let mut session = match session_query {

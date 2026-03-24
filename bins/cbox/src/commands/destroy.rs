@@ -51,19 +51,16 @@ pub fn execute(all: bool, force: bool, session_query: Option<String>) -> Result<
 
     for session in &sessions {
         match session.backend {
+            #[cfg(target_os = "linux")]
             BackendKind::Native => {
                 // Kill process, clean up veth/iptables/cgroup
                 if let Some(pid) = session.pid {
                     if SessionStore::is_alive(session) {
                         let npid = nix::unistd::Pid::from_raw(pid as i32);
-                        let _ =
-                            nix::sys::signal::kill(npid, nix::sys::signal::Signal::SIGTERM);
+                        let _ = nix::sys::signal::kill(npid, nix::sys::signal::Signal::SIGTERM);
                         std::thread::sleep(std::time::Duration::from_secs(2));
                         if SessionStore::is_alive(session) {
-                            let _ = nix::sys::signal::kill(
-                                npid,
-                                nix::sys::signal::Signal::SIGKILL,
-                            );
+                            let _ = nix::sys::signal::kill(npid, nix::sys::signal::Signal::SIGKILL);
                         }
                     }
                 }
@@ -71,13 +68,15 @@ pub fn execute(all: bool, force: bool, session_query: Option<String>) -> Result<
                 if let Some(ref veth) = session.veth_host {
                     let _ = cbox_network::NetworkSetup::delete_veth(veth);
                 }
-                let _ =
-                    cbox_network::NetworkSetup::cleanup_iptables(&session.iptables_rules);
+                let _ = cbox_network::NetworkSetup::cleanup_iptables(&session.iptables_rules);
 
                 if let Some(ref cg) = session.cgroup_path {
-                    let _ =
-                        cbox_sandbox::cgroup::CgroupSetup::cleanup(std::path::Path::new(cg));
+                    let _ = cbox_sandbox::cgroup::CgroupSetup::cleanup(std::path::Path::new(cg));
                 }
+            }
+            #[cfg(not(target_os = "linux"))]
+            BackendKind::Native => {
+                // Native backend cleanup is Linux-only; shouldn't reach here on other platforms
             }
             BackendKind::Container => {
                 // Stop/remove the container

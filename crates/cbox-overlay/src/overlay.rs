@@ -68,6 +68,7 @@ impl OverlayFs {
     }
 
     /// Mount the overlayfs. Must be called inside a mount namespace.
+    #[cfg(target_os = "linux")]
     pub fn mount(&self) -> Result<(), OverlayError> {
         let opts = format!(
             "lowerdir={},upperdir={},workdir={}",
@@ -90,6 +91,7 @@ impl OverlayFs {
     }
 
     /// Unmount the overlayfs.
+    #[cfg(target_os = "linux")]
     pub fn unmount(&self) -> Result<(), OverlayError> {
         if self.merged_dir.exists() {
             nix::mount::umount(&self.merged_dir)
@@ -209,7 +211,10 @@ impl OverlayFs {
     /// Clean up all overlay directories.
     pub fn cleanup(&self) -> Result<(), OverlayError> {
         // Try to unmount first (may already be unmounted)
-        let _ = self.unmount();
+        #[cfg(target_os = "linux")]
+        {
+            let _ = self.unmount();
+        }
 
         for dir in [&self.merged_dir, &self.work_dir, &self.upper_dir] {
             if dir.exists() {

@@ -40,7 +40,9 @@ impl Capabilities {
             warn!("cgroups v2: NOT available — resource limits disabled");
         }
         if !caps.iptables || !caps.ip_command {
-            warn!("network tools missing — network isolation will use empty netns (no connectivity)");
+            warn!(
+                "network tools missing — network isolation will use empty netns (no connectivity)"
+            );
         }
 
         caps
@@ -48,7 +50,8 @@ impl Capabilities {
 
     fn probe_user_namespaces() -> bool {
         // Check if user namespaces are enabled via sysctl
-        if let Ok(contents) = std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone") {
+        if let Ok(contents) = std::fs::read_to_string("/proc/sys/kernel/unprivileged_userns_clone")
+        {
             if contents.trim() == "0" {
                 return false;
             }
@@ -88,11 +91,9 @@ impl Capabilities {
     /// Ensure minimum requirements are met, return error message if not.
     pub fn check_minimum(&self) -> Result<(), String> {
         if !self.user_namespaces {
-            return Err(
-                "User namespaces are not available. Enable with: \
+            return Err("User namespaces are not available. Enable with: \
                  sudo sysctl -w kernel.unprivileged_userns_clone=1"
-                    .to_string(),
-            );
+                .to_string());
         }
         Ok(())
     }

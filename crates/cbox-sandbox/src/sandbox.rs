@@ -5,7 +5,7 @@ use std::path::Path;
 
 use cbox_core::capability::Capabilities;
 use cbox_core::{CboxConfig, Session, SessionStatus, SessionStore};
-use cbox_network::{NetworkSetup, NetworkConfig, NetworkMode};
+use cbox_network::{NetworkConfig, NetworkMode, NetworkSetup};
 use cbox_overlay::OverlayFs;
 use nix::mount::{mount, MsFlags};
 use nix::sched::CloneFlags;
@@ -194,8 +194,9 @@ impl Sandbox {
 
                 // Wait for child to complete unshare()
                 let mut buf = [0u8; 1];
-                nix::unistd::read(unshare_parent_fd.as_raw_fd(), &mut buf)
-                    .map_err(|e| SandboxError::Namespace(format!("wait for child unshare: {}", e)))?;
+                nix::unistd::read(unshare_parent_fd.as_raw_fd(), &mut buf).map_err(|e| {
+                    SandboxError::Namespace(format!("wait for child unshare: {}", e))
+                })?;
                 drop(unshare_parent_fd);
 
                 info!("child has unshared namespaces");
@@ -305,21 +306,18 @@ impl Sandbox {
 
                 // Second fork to be PID 1 in the new PID namespace
                 match unsafe { unistd::fork() }.unwrap() {
-                    ForkResult::Parent { child } => {
-                        loop {
-                            match waitpid(child, None) {
-                                Ok(WaitStatus::Exited(_, code)) => std::process::exit(code),
-                                Err(nix::errno::Errno::EINTR) => continue,
-                                _ => std::process::exit(1),
-                            }
+                    ForkResult::Parent { child } => loop {
+                        match waitpid(child, None) {
+                            Ok(WaitStatus::Exited(_, code)) => std::process::exit(code),
+                            Err(nix::errno::Errno::EINTR) => continue,
+                            _ => std::process::exit(1),
                         }
-                    }
+                    },
                     ForkResult::Child => {
                         if has_net_tools && deny_network {
-                            if let Err(e) = NetworkSetup::configure_child_network(
-                                child_subnet,
-                                &child_dns,
-                            ) {
+                            if let Err(e) =
+                                NetworkSetup::configure_child_network(child_subnet, &child_dns)
+                            {
                                 eprintln!("warning: child network setup failed: {}", e);
                             }
                         }
@@ -352,16 +350,23 @@ impl Sandbox {
 
                         let mut final_env: Vec<CString> = Vec::new();
                         for (k, v) in &child_env {
-                            final_env.push(
-                                CString::new(format!("{}={}", k, v)).unwrap(),
-                            );
+                            final_env.push(CString::new(format!("{}={}", k, v)).unwrap());
                         }
-                        let path_val = format!("PATH={}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", child_local_bin);
+                        let path_val = format!(
+                            "PATH={}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+                            child_local_bin
+                        );
                         final_env.push(CString::new(path_val).unwrap());
-                        if final_env.iter().all(|e| !e.to_str().unwrap_or("").starts_with("HOME=")) {
+                        if final_env
+                            .iter()
+                            .all(|e| !e.to_str().unwrap_or("").starts_with("HOME="))
+                        {
                             final_env.push(CString::new("HOME=/root").unwrap());
                         }
-                        if final_env.iter().all(|e| !e.to_str().unwrap_or("").starts_with("TERM=")) {
+                        if final_env
+                            .iter()
+                            .all(|e| !e.to_str().unwrap_or("").starts_with("TERM="))
+                        {
                             final_env.push(CString::new("TERM=xterm-256color").unwrap());
                         }
 
@@ -389,20 +394,17 @@ impl Sandbox {
     fn write_id_mappings(child_pid: u32, uid: u32, gid: u32) -> Result<(), SandboxError> {
         // "deny" setgroups is required before writing gid_map as unprivileged user
         let setgroups_path = format!("/proc/{}/setgroups", child_pid);
-        std::fs::write(&setgroups_path, "deny").map_err(|e| {
-            SandboxError::Namespace(format!("write setgroups: {}", e))
-        })?;
+        std::fs::write(&setgroups_path, "deny")
+            .map_err(|e| SandboxError::Namespace(format!("write setgroups: {}", e)))?;
 
         // Map uid/gid 0 inside → real uid/gid outside
         let uid_map = format!("/proc/{}/uid_map", child_pid);
-        std::fs::write(&uid_map, format!("0 {} 1", uid)).map_err(|e| {
-            SandboxError::Namespace(format!("write uid_map: {}", e))
-        })?;
+        std::fs::write(&uid_map, format!("0 {} 1", uid))
+            .map_err(|e| SandboxError::Namespace(format!("write uid_map: {}", e)))?;
 
         let gid_map = format!("/proc/{}/gid_map", child_pid);
-        std::fs::write(&gid_map, format!("0 {} 1", gid)).map_err(|e| {
-            SandboxError::Namespace(format!("write gid_map: {}", e))
-        })?;
+        std::fs::write(&gid_map, format!("0 {} 1", gid))
+            .map_err(|e| SandboxError::Namespace(format!("write gid_map: {}", e)))?;
 
         debug!("uid/gid mappings written for pid {}", child_pid);
         Ok(())
@@ -413,14 +415,8 @@ impl Sandbox {
         ro_mounts: &[String],
         rw_mounts: &[String],
     ) -> Result<(), SandboxError> {
-        mount::<str, str, str, str>(
-            None,
-            "/",
-            None,
-            MsFlags::MS_PRIVATE | MsFlags::MS_REC,
-            None,
-        )
-        .map_err(|e| SandboxError::Mount(format!("privatize /: {}", e)))?;
+        mount::<str, str, str, str>(None, "/", None, MsFlags::MS_PRIVATE | MsFlags::MS_REC, None)
+            .map_err(|e| SandboxError::Mount(format!("privatize /: {}", e)))?;
 
         overlay
             .mount()
@@ -434,8 +430,9 @@ impl Sandbox {
                     if let Some(parent) = target.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
-                    std::fs::write(&target, "")
-                        .map_err(|e| SandboxError::Mount(format!("create mount point {}: {}", dir, e)))?;
+                    std::fs::write(&target, "").map_err(|e| {
+                        SandboxError::Mount(format!("create mount point {}: {}", dir, e))
+                    })?;
                 } else {
                     std::fs::create_dir_all(&target)?;
                 }
@@ -446,9 +443,7 @@ impl Sandbox {
                     MsFlags::MS_BIND | MsFlags::MS_REC,
                     None::<&str>,
                 )
-                .map_err(|e| {
-                    SandboxError::Mount(format!("bind mount {}: {}", dir, e))
-                })?;
+                .map_err(|e| SandboxError::Mount(format!("bind mount {}: {}", dir, e)))?;
                 mount(
                     None::<&str>,
                     &target,
@@ -456,9 +451,7 @@ impl Sandbox {
                     MsFlags::MS_BIND | MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY | MsFlags::MS_REC,
                     None::<&str>,
                 )
-                .map_err(|e| {
-                    SandboxError::Mount(format!("remount ro {}: {}", dir, e))
-                })?;
+                .map_err(|e| SandboxError::Mount(format!("remount ro {}: {}", dir, e)))?;
             }
         }
 
@@ -471,8 +464,9 @@ impl Sandbox {
                     if let Some(parent) = target.parent() {
                         std::fs::create_dir_all(parent)?;
                     }
-                    std::fs::write(&target, "")
-                        .map_err(|e| SandboxError::Mount(format!("create mount point {}: {}", dir, e)))?;
+                    std::fs::write(&target, "").map_err(|e| {
+                        SandboxError::Mount(format!("create mount point {}: {}", dir, e))
+                    })?;
                 } else {
                     std::fs::create_dir_all(&target)?;
                 }
@@ -483,9 +477,7 @@ impl Sandbox {
                     MsFlags::MS_BIND | MsFlags::MS_REC,
                     None::<&str>,
                 )
-                .map_err(|e| {
-                    SandboxError::Mount(format!("bind mount rw {}: {}", dir, e))
-                })?;
+                .map_err(|e| SandboxError::Mount(format!("bind mount rw {}: {}", dir, e)))?;
             }
         }
 
@@ -529,17 +521,14 @@ impl Sandbox {
         let old_root = overlay.merged_dir.join("old_root");
         std::fs::create_dir_all(&old_root)?;
 
-        nix::unistd::pivot_root(&overlay.merged_dir, &old_root).map_err(|e| {
-            SandboxError::Mount(format!("pivot_root: {}", e))
-        })?;
+        nix::unistd::pivot_root(&overlay.merged_dir, &old_root)
+            .map_err(|e| SandboxError::Mount(format!("pivot_root: {}", e)))?;
 
-        std::env::set_current_dir("/").map_err(|e| {
-            SandboxError::Mount(format!("chdir /: {}", e))
-        })?;
+        std::env::set_current_dir("/")
+            .map_err(|e| SandboxError::Mount(format!("chdir /: {}", e)))?;
 
-        nix::mount::umount2("/old_root", nix::mount::MntFlags::MNT_DETACH).map_err(|e| {
-            SandboxError::Mount(format!("umount old_root: {}", e))
-        })?;
+        nix::mount::umount2("/old_root", nix::mount::MntFlags::MNT_DETACH)
+            .map_err(|e| SandboxError::Mount(format!("umount old_root: {}", e)))?;
         std::fs::remove_dir("/old_root").ok();
 
         Ok(())

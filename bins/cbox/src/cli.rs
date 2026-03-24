@@ -50,6 +50,10 @@ pub enum Command {
         #[arg(long, default_value = "auto")]
         backend: String,
 
+        /// Container image to use (e.g., "ubuntu:24.04", "myuser/cbox-dev:latest")
+        #[arg(long)]
+        image: Option<String>,
+
         /// Command to run inside the sandbox (defaults to $SHELL)
         #[arg(last = true)]
         cmd: Vec<String>,

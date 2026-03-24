@@ -1,9 +1,9 @@
-pub mod run;
-pub mod diff;
-pub mod merge;
 pub mod destroy;
-pub mod save;
+pub mod diff;
 pub mod list;
+pub mod merge;
+pub mod run;
+pub mod save;
 
 use anyhow::Result;
 
@@ -20,8 +20,11 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             cpu,
             dry_run,
             backend,
+            image,
             cmd,
-        } => run::execute(adapter, persist, session, network, memory, cpu, dry_run, backend, cmd),
+        } => run::execute(
+            adapter, persist, session, network, memory, cpu, dry_run, backend, image, cmd,
+        ),
 
         Command::Diff {
             stat,

@@ -9,7 +9,12 @@ use cbox_overlay::OverlayFs;
 
 use crate::filter;
 
-pub fn execute(pick: bool, force: bool, dry_run: bool, session_query: Option<String>) -> Result<()> {
+pub fn execute(
+    pick: bool,
+    force: bool,
+    dry_run: bool,
+    session_query: Option<String>,
+) -> Result<()> {
     let session = match session_query {
         Some(q) => SessionStore::find(&q).context("session not found")?,
         None => {
@@ -45,7 +50,11 @@ pub fn execute(pick: bool, force: bool, dry_run: bool, session_query: Option<Str
     }
 
     if dry_run {
-        println!("\n{} Dry run — {} changes would be applied.", "cbox".green().bold(), changes_to_merge.len());
+        println!(
+            "\n{} Dry run — {} changes would be applied.",
+            "cbox".green().bold(),
+            changes_to_merge.len()
+        );
         return Ok(());
     }
 
@@ -64,9 +73,7 @@ pub fn execute(pick: bool, force: bool, dry_run: bool, session_query: Option<Str
         }
     }
 
-    overlay
-        .merge(&changes_to_merge)
-        .context("merge failed")?;
+    overlay.merge(&changes_to_merge).context("merge failed")?;
 
     println!(
         "\n{} {} changes merged into {}",

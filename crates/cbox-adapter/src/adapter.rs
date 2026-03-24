@@ -48,11 +48,7 @@ pub trait AgentAdapter: Send + Sync {
     }
 
     /// Called after the agent process exits.
-    fn post_run(
-        &self,
-        _exit_status: ExitStatus,
-        _session: &Session,
-    ) -> Result<(), AdapterError> {
+    fn post_run(&self, _exit_status: ExitStatus, _session: &Session) -> Result<(), AdapterError> {
         Ok(())
     }
 }

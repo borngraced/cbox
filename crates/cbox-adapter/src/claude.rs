@@ -14,9 +14,8 @@ impl ClaudeCodeAdapter {
     fn find_claude_binary() -> Option<PathBuf> {
         let real_home = cbox_core::util::real_user_home();
 
-        let mut candidates: Vec<PathBuf> = vec![
-            PathBuf::from(&real_home).join(".local/bin/claude"),
-        ];
+        let mut candidates: Vec<PathBuf> =
+            vec![PathBuf::from(&real_home).join(".local/bin/claude")];
         if let Ok(home) = std::env::var("HOME") {
             if home != real_home {
                 candidates.push(PathBuf::from(home).join(".local/bin/claude"));
