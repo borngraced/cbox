@@ -1,0 +1,46 @@
+# cbox.toml — Configuration for Claude's Box sandbox
+# Place this file in your project root.
+
+[sandbox]
+# Directories mounted read-only inside the sandbox
+ro_mounts = ["/usr", "/lib", "/lib64", "/bin", "/sbin", "/etc"]
+# Extra directories to overlay (read-write via overlayfs)
+overlay_dirs = []
+# Additional syscalls to block (beyond default denylist)
+blocked_syscalls = []
+# Paths excluded from diff/merge (glob patterns)
+# Filters out shell history, editor caches, and other sandbox artifacts
+merge_exclude = [
+    "root/.bash_history",
+    "root/.cache/**",
+    "root/.local/**",
+    "root/.config/**",
+    ".bash_history",
+    ".viminfo",
+    ".lesshst",
+]
+
+[network]
+# Network mode: "deny" (default) or "allow"
+mode = "deny"
+# Whitelisted hosts (only used when mode = "deny")
+# Format: "hostname:port" or just "hostname"
+allow = [
+    "api.anthropic.com:443",
+]
+# DNS servers to use inside the sandbox
+dns = ["8.8.8.8", "8.8.4.4"]
+
+[resources]
+# Memory limit
+memory = "4G"
+# CPU limit as percentage (100% = 1 core, 200% = 2 cores)
+cpu = "200%"
+# Maximum number of processes
+max_pids = 4096
+
+[adapter]
+# Default adapter: "auto", "generic", or "claude"
+default = "auto"
+# Environment variables to pass through to the sandbox
+env_passthrough = ["ANTHROPIC_API_KEY"]

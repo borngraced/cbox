@@ -1,0 +1,42 @@
+[workspace]
+resolver = "2"
+members = [
+    "bins/cbox",
+    "crates/cbox-core",
+    "crates/cbox-sandbox",
+    "crates/cbox-overlay",
+    "crates/cbox-network",
+    "crates/cbox-adapter",
+    "crates/cbox-diff",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+
+[workspace.dependencies]
+# Internal crates
+cbox-core = { path = "crates/cbox-core" }
+cbox-sandbox = { path = "crates/cbox-sandbox" }
+cbox-overlay = { path = "crates/cbox-overlay" }
+cbox-network = { path = "crates/cbox-network" }
+cbox-adapter = { path = "crates/cbox-adapter" }
+cbox-diff = { path = "crates/cbox-diff" }
+
+# External deps
+nix = { version = "0.29", features = ["user", "mount", "sched", "signal", "hostname", "process", "net", "ioctl", "term", "fs"] }
+clap = { version = "4", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+thiserror = "2"
+anyhow = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+similar = "2"
+crossterm = "0.28"
+colored = "2"
+walkdir = "2"
+uuid = { version = "1", features = ["v4"] }
+chrono = { version = "0.4", features = ["serde"] }
+serde_json = "1"

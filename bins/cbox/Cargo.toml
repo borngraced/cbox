@@ -1,0 +1,23 @@
+[package]
+name = "cbox"
+version.workspace = true
+edition.workspace = true
+
+[[bin]]
+name = "cbox"
+path = "src/main.rs"
+
+[dependencies]
+cbox-core = { workspace = true }
+cbox-sandbox = { workspace = true }
+cbox-overlay = { workspace = true }
+cbox-network = { workspace = true }
+cbox-adapter = { workspace = true }
+cbox-diff = { workspace = true }
+clap = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+colored = { workspace = true }
+nix = { workspace = true }
+serde_json = { workspace = true }

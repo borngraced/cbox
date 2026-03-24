@@ -1,0 +1,12 @@
+[package]
+name = "cbox-sandbox"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+cbox-core = { workspace = true }
+cbox-overlay = { workspace = true }
+cbox-network = { workspace = true }
+nix = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }

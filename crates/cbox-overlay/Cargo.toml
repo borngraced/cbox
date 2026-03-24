@@ -1,0 +1,14 @@
+[package]
+name = "cbox-overlay"
+version.workspace = true
+edition.workspace = true
+
+[dev-dependencies]
+tempfile = "3"
+
+[dependencies]
+cbox-core = { workspace = true }
+nix = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+walkdir = { workspace = true }
