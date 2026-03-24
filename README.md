@@ -4,6 +4,8 @@ Contained Box — OS-level sandboxing for AI agents and arbitrary commands. Run 
 
 Works on **Linux** (native namespaces) and **macOS** (via Docker/Podman). Same CLI, same workflow.
 
+![cbox demo](demo.gif)
+
 Network is denied by default — pass `--network allow` to grant access.
 
 ```
