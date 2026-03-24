@@ -90,6 +90,12 @@ cbox save [--name NAME] [SESSION] # snapshot session
 cbox list [--json]                # list sessions
 ```
 
+### Persistence
+
+By default, sessions are one-shot: run a command, review changes with `cbox diff`, apply them with `cbox merge`, then clean up with `cbox destroy`.
+
+With `--persist`, the session's overlay data is kept after exit so you can re-enter it later, compare multiple sessions side by side, or snapshot it with `cbox save`.
+
 ### Examples
 
 ```bash
