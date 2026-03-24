@@ -61,10 +61,7 @@ After the agent exits, `cbox diff` shows exactly what changed. `cbox merge` appl
 ## Install
 
 ```
-git clone https://github.com/borngraced/cbox
-cd cbox
-cargo build --release
-sudo cp target/release/cbox /usr/local/bin/
+cargo install --git https://github.com/borngraced/cbox cbox
 ```
 
 ### System requirements
