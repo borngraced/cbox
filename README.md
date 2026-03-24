@@ -67,9 +67,16 @@ After the agent exits, `cbox diff` shows exactly what changed. `cbox merge` appl
 
 ## Install
 
+### Homebrew (macOS/Linux)
+
+```
+brew tap borngraced/cbox
+brew install cbox
+```
+
 ### Pre-built binaries
 
-Download from [GitHub Releases](https://github.com/borngraced/cbox/releases) — binaries are available for Linux and macOS.
+Download from [GitHub Releases](https://github.com/borngraced/cbox/releases).
 
 ### From source
 
