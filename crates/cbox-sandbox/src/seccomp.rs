@@ -87,14 +87,13 @@ pub fn apply_seccomp_filter(extra_blocked: &[String]) -> Result<(), SandboxError
 /// Build a BPF denylist filter for the given syscall names.
 #[cfg(target_arch = "x86_64")]
 fn build_bpf_denylist(blocked: &[&str]) -> Result<Vec<libc::sock_filter>, SandboxError> {
-    let mut filter: Vec<libc::sock_filter> = Vec::new();
-
     // Verify architecture is x86_64 (AUDIT_ARCH_X86_64 = 0xC000003E), kill if not
-    filter.push(bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 4)); // seccomp_data.arch
-    filter.push(bpf_jump(BPF_JMP | BPF_JEQ | BPF_K, 0xC000003E, 1, 0));
-    filter.push(bpf_stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS));
-
-    filter.push(bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 0)); // seccomp_data.nr
+    let mut filter: Vec<libc::sock_filter> = vec![
+        bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 4),                    // seccomp_data.arch
+        bpf_jump(BPF_JMP | BPF_JEQ | BPF_K, 0xC000003E, 1, 0),
+        bpf_stmt(BPF_RET | BPF_K, SECCOMP_RET_KILL_PROCESS),
+        bpf_stmt(BPF_LD | BPF_W | BPF_ABS, 0),                    // seccomp_data.nr
+    ];
 
     let syscall_numbers = resolve_syscall_numbers(blocked);
     let num_checks = syscall_numbers.len();

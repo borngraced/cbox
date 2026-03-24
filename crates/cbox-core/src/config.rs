@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::error::CoreError;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct CboxConfig {
     #[serde(default)]
     pub sandbox: SandboxConfig,
@@ -271,15 +271,6 @@ impl CboxConfig {
         }
     }
 
-    /// Return default config.
-    pub fn default() -> Self {
-        Self {
-            sandbox: SandboxConfig::default(),
-            network: NetworkConfig::default(),
-            resources: ResourceConfig::default(),
-            adapter: AdapterConfig::default(),
-        }
-    }
 
     /// Parse a memory string like "4G" or "512M" into bytes.
     pub fn parse_memory_bytes(s: &str) -> Result<u64, CoreError> {

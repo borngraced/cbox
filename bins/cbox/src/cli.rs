@@ -46,6 +46,10 @@ pub enum Command {
         #[arg(long)]
         dry_run: bool,
 
+        /// Backend: auto, native, or container
+        #[arg(long, default_value = "auto")]
+        backend: String,
+
         /// Command to run inside the sandbox (defaults to $SHELL)
         #[arg(last = true)]
         cmd: Vec<String>,

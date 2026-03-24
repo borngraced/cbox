@@ -19,8 +19,9 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             memory,
             cpu,
             dry_run,
+            backend,
             cmd,
-        } => run::execute(adapter, persist, session, network, memory, cpu, dry_run, cmd),
+        } => run::execute(adapter, persist, session, network, memory, cpu, dry_run, backend, cmd),
 
         Command::Diff {
             stat,

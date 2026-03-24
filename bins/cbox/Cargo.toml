@@ -14,6 +14,7 @@ cbox-overlay = { workspace = true }
 cbox-network = { workspace = true }
 cbox-adapter = { workspace = true }
 cbox-diff = { workspace = true }
+cbox-container = { workspace = true }
 clap = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }

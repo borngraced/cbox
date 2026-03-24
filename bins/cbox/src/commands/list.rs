@@ -27,8 +27,8 @@ pub fn execute(all: bool, json: bool) -> Result<()> {
     }
 
     println!(
-        "{:<12} {:<16} {:<10} {:<8} {:<24} {}",
-        "ID", "NAME", "STATUS", "ALIVE", "CREATED", "PROJECT"
+        "{:<12} {:<16} {:<10} {:<8} {:<24} PROJECT",
+        "ID", "NAME", "STATUS", "ALIVE", "CREATED"
     );
     println!("{}", "-".repeat(90));
 

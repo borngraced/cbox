@@ -30,6 +30,31 @@ pub struct SandboxResult {
     pub session: Session,
 }
 
+impl From<SandboxError> for cbox_core::BackendError {
+    fn from(e: SandboxError) -> Self {
+        cbox_core::BackendError::Backend(e.to_string())
+    }
+}
+
+impl cbox_core::SandboxBackend for Sandbox {
+    fn run(
+        self,
+        command: &[String],
+        env: HashMap<String, String>,
+        dry_run: bool,
+    ) -> Result<cbox_core::BackendResult, cbox_core::BackendError> {
+        let result = self.run_native(command, env, dry_run)?;
+        Ok(cbox_core::BackendResult {
+            exit_code: result.exit_code,
+            session: result.session,
+        })
+    }
+
+    fn kind(&self) -> cbox_core::BackendKind {
+        cbox_core::BackendKind::Native
+    }
+}
+
 impl Sandbox {
     pub fn new(session: Session, config: CboxConfig, capabilities: Capabilities) -> Self {
         Self {
@@ -40,7 +65,7 @@ impl Sandbox {
     }
 
     /// Execute the sandbox lifecycle: setup, run, teardown.
-    pub fn run(
+    pub fn run_native(
         mut self,
         command: &[String],
         env: HashMap<String, String>,

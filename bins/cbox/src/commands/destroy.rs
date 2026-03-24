@@ -3,10 +3,8 @@ use std::io::{self, BufRead, Write};
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use cbox_core::SessionStore;
-use cbox_network::NetworkSetup;
+use cbox_core::{BackendKind, SessionStore};
 use cbox_overlay::OverlayFs;
-use cbox_sandbox::cgroup::CgroupSetup;
 
 pub fn execute(all: bool, force: bool, session_query: Option<String>) -> Result<()> {
     let sessions = if all {
@@ -52,28 +50,56 @@ pub fn execute(all: bool, force: bool, session_query: Option<String>) -> Result<
     }
 
     for session in &sessions {
-        if let Some(pid) = session.pid {
-            if SessionStore::is_alive(session) {
-                let npid = nix::unistd::Pid::from_raw(pid as i32);
-                let _ = nix::sys::signal::kill(npid, nix::sys::signal::Signal::SIGTERM);
-                std::thread::sleep(std::time::Duration::from_secs(2));
-                if SessionStore::is_alive(session) {
-                    let _ = nix::sys::signal::kill(npid, nix::sys::signal::Signal::SIGKILL);
+        match session.backend {
+            BackendKind::Native => {
+                // Kill process, clean up veth/iptables/cgroup
+                if let Some(pid) = session.pid {
+                    if SessionStore::is_alive(session) {
+                        let npid = nix::unistd::Pid::from_raw(pid as i32);
+                        let _ =
+                            nix::sys::signal::kill(npid, nix::sys::signal::Signal::SIGTERM);
+                        std::thread::sleep(std::time::Duration::from_secs(2));
+                        if SessionStore::is_alive(session) {
+                            let _ = nix::sys::signal::kill(
+                                npid,
+                                nix::sys::signal::Signal::SIGKILL,
+                            );
+                        }
+                    }
+                }
+
+                if let Some(ref veth) = session.veth_host {
+                    let _ = cbox_network::NetworkSetup::delete_veth(veth);
+                }
+                let _ =
+                    cbox_network::NetworkSetup::cleanup_iptables(&session.iptables_rules);
+
+                if let Some(ref cg) = session.cgroup_path {
+                    let _ =
+                        cbox_sandbox::cgroup::CgroupSetup::cleanup(std::path::Path::new(cg));
+                }
+            }
+            BackendKind::Container => {
+                // Stop/remove the container
+                if let Some(ref runtime) = session.container_runtime {
+                    let name = format!("cbox_{}", session.id);
+                    let _ = std::process::Command::new(runtime)
+                        .args(["stop", &name])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
+                    let _ = std::process::Command::new(runtime)
+                        .args(["rm", "-f", &name])
+                        .stdout(std::process::Stdio::null())
+                        .stderr(std::process::Stdio::null())
+                        .status();
                 }
             }
         }
 
+        // Overlay cleanup is the same for both backends
         let overlay = OverlayFs::from_session(session);
         let _ = overlay.cleanup();
-
-        if let Some(ref veth) = session.veth_host {
-            let _ = NetworkSetup::delete_veth(veth);
-        }
-        let _ = NetworkSetup::cleanup_iptables(&session.iptables_rules);
-
-        if let Some(ref cg) = session.cgroup_path {
-            let _ = CgroupSetup::cleanup(std::path::Path::new(cg));
-        }
 
         SessionStore::delete(&session.id)?;
 

@@ -1,12 +1,14 @@
 use std::collections::HashMap;
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::Colorize;
 
 use cbox_adapter::AdapterRegistry;
 use cbox_core::capability::Capabilities;
-use cbox_core::{CboxConfig, Session, SessionStore};
+use cbox_core::{BackendKind, CboxConfig, SandboxBackend, Session, SessionStore};
+use cbox_container::{ContainerBackend, ContainerRuntime};
 use cbox_sandbox::Sandbox;
 
+#[allow(clippy::too_many_arguments)]
 pub fn execute(
     adapter_name: String,
     persist: bool,
@@ -15,6 +17,7 @@ pub fn execute(
     memory: Option<String>,
     cpu: Option<String>,
     dry_run: bool,
+    backend_str: String,
     cmd: Vec<String>,
 ) -> Result<()> {
     let cmd = if cmd.is_empty() {
@@ -24,11 +27,7 @@ pub fn execute(
         cmd
     };
 
-    let caps = Capabilities::detect();
-    if !dry_run {
-        caps.check_minimum()
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
-    }
+    let backend_kind = select_backend(&backend_str, dry_run)?;
 
     let cwd = std::env::current_dir()?;
     let mut config = CboxConfig::find_and_load(&cwd)?;
@@ -83,20 +82,44 @@ pub fn execute(
 
     let project_dir = CboxConfig::project_root(&cwd);
     SessionStore::ensure_dir()?;
-    let session = Session::new(project_dir, session_name, adapter.name().to_string(), persist);
+    let session = Session::new(
+        project_dir,
+        session_name,
+        adapter.name().to_string(),
+        persist,
+        backend_kind,
+    );
 
     println!(
-        "{} session {} (adapter: {}, persist: {})",
+        "{} session {} (adapter: {}, backend: {}, persist: {})",
         "cbox".green().bold(),
         session.display_name().cyan(),
         adapter.name(),
+        backend_kind,
         persist
     );
 
-    let sandbox = Sandbox::new(session, config, caps);
-    let result = sandbox
-        .run(&full_cmd, env, dry_run)
-        .context("sandbox execution failed")?;
+    let result = match backend_kind {
+        BackendKind::Native => {
+            let caps = Capabilities::detect();
+            if !dry_run {
+                caps.check_minimum()
+                    .map_err(|e| anyhow::anyhow!("{}", e))?;
+            }
+            let sandbox = Sandbox::new(session, config, caps);
+            sandbox
+                .run(&full_cmd, env, dry_run)
+                .map_err(|e| anyhow::anyhow!("{}", e))?
+        }
+        BackendKind::Container => {
+            let runtime = ContainerRuntime::detect()
+                .map_err(|e| anyhow::anyhow!("{}", e))?;
+            let backend = ContainerBackend::new(session, config, runtime);
+            backend
+                .run(&full_cmd, env, dry_run)
+                .map_err(|e| anyhow::anyhow!("{}", e))?
+        }
+    };
 
     if !dry_run {
         println!(
@@ -116,4 +139,38 @@ pub fn execute(
     }
 
     std::process::exit(result.exit_code);
+}
+
+fn select_backend(requested: &str, _dry_run: bool) -> Result<BackendKind> {
+    match requested {
+        "native" => Ok(BackendKind::Native),
+        "container" | "docker" | "podman" => Ok(BackendKind::Container),
+        "auto" => auto_detect_backend(),
+        other => anyhow::bail!("unknown backend: {}", other),
+    }
+}
+
+fn auto_detect_backend() -> Result<BackendKind> {
+    #[cfg(target_os = "linux")]
+    {
+        let caps = Capabilities::detect();
+        if caps.user_namespaces {
+            return Ok(BackendKind::Native);
+        }
+        if ContainerRuntime::detect().is_ok() {
+            tracing::warn!("user namespaces unavailable, falling back to container backend");
+            return Ok(BackendKind::Container);
+        }
+        anyhow::bail!("neither native namespaces nor container runtime available");
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    {
+        if ContainerRuntime::detect().is_ok() {
+            return Ok(BackendKind::Container);
+        }
+        anyhow::bail!(
+            "no container runtime found. Install Docker Desktop or Podman."
+        );
+    }
 }

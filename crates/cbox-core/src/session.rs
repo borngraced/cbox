@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use crate::backend::BackendKind;
 use crate::error::CoreError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -46,10 +47,24 @@ pub struct Session {
 
     /// Subnet index used for veth addressing
     pub subnet_index: Option<u8>,
+
+    /// Which backend was used to create this session.
+    #[serde(default)]
+    pub backend: BackendKind,
+
+    /// Container runtime used (e.g. "docker", "podman").
+    #[serde(default)]
+    pub container_runtime: Option<String>,
 }
 
 impl Session {
-    pub fn new(project_dir: PathBuf, name: Option<String>, adapter: String, persist: bool) -> Self {
+    pub fn new(
+        project_dir: PathBuf,
+        name: Option<String>,
+        adapter: String,
+        persist: bool,
+        backend: BackendKind,
+    ) -> Self {
         let id = uuid::Uuid::new_v4().to_string()[..8].to_string();
         Self {
             id,
@@ -64,6 +79,8 @@ impl Session {
             veth_host: None,
             cgroup_path: None,
             subnet_index: None,
+            backend,
+            container_runtime: None,
         }
     }
 
@@ -206,6 +223,7 @@ mod tests {
             Some("test-session".to_string()),
             "generic".to_string(),
             false,
+            BackendKind::Native,
         );
         assert_eq!(session.name.as_deref(), Some("test-session"));
         assert_eq!(session.display_name(), "test-session");
@@ -220,6 +238,7 @@ mod tests {
             None,
             "generic".to_string(),
             false,
+            BackendKind::Native,
         );
         let session_dir = session.session_dir();
         assert!(session_dir.ends_with(&session.id));

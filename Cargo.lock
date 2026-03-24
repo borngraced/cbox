@@ -100,6 +100,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "cbox-adapter",
+ "cbox-container",
  "cbox-core",
  "cbox-diff",
  "cbox-network",
@@ -115,6 +116,15 @@ dependencies = [
 
 [[package]]
 name = "cbox-adapter"
+version = "0.1.0"
+dependencies = [
+ "cbox-core",
+ "thiserror",
+ "tracing",
+]
+
+[[package]]
+name = "cbox-container"
 version = "0.1.0"
 dependencies = [
  "cbox-core",

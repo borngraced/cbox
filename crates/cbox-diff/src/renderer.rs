@@ -67,7 +67,7 @@ impl DiffRenderer {
                 cbox_overlay::ChangeKind::Added => {
                     output.push_str(&format!(
                         "{}\n",
-                        format!("--- /dev/null").red()
+                        "--- /dev/null".to_string().red()
                     ));
                     output.push_str(&format!(
                         "{}\n",

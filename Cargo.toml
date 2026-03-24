@@ -8,6 +8,7 @@ members = [
     "crates/cbox-network",
     "crates/cbox-adapter",
     "crates/cbox-diff",
+    "crates/cbox-container",
 ]
 
 [workspace.package]
@@ -23,6 +24,7 @@ cbox-overlay = { path = "crates/cbox-overlay" }
 cbox-network = { path = "crates/cbox-network" }
 cbox-adapter = { path = "crates/cbox-adapter" }
 cbox-diff = { path = "crates/cbox-diff" }
+cbox-container = { path = "crates/cbox-container" }
 
 # External deps
 nix = { version = "0.29", features = ["user", "mount", "sched", "signal", "hostname", "process", "net", "ioctl", "term", "fs"] }
