@@ -4,6 +4,8 @@ Contained Box — OS-level sandboxing for AI agents and arbitrary commands. Run 
 
 Works on **Linux** (native namespaces) and **macOS** (via Docker/Podman). Same CLI, same workflow.
 
+Network is denied by default — pass `--network allow` to grant access.
+
 ```
 ~/downloads $ cbox run --network allow -- claude
 cbox session a3f7c012 (adapter: claude, backend: native, persist: false)
@@ -48,8 +50,9 @@ cbox has two backends that provide the same isolation guarantees:
 ### Container backend (macOS, Linux fallback)
 - **Docker or Podman** — auto-detected, no configuration needed
 - **Auto-built base image** — on first run, cbox builds a `cbox-base` image with common tools (bash, zsh, fish, git, vim, curl, build-essential) and **Claude Code** pre-installed
-- **OverlayFS via tmpfs** — uses a tmpfs-backed overlay inside the container; falls back to copy-based isolation on macOS (virtiofs incompatibility)
-- **`--network=none`** for deny mode, default bridge for allow mode
+- **OverlayFS via tmpfs** — uses a tmpfs-backed overlay inside the container
+- **macOS note** — falls back to copy-based isolation due to virtiofs incompatibility with overlayfs (slightly slower initial setup)
+- **`--network=none`** for deny mode, `--network=host` for allow mode (needed for OAuth callbacks)
 - **Resource limits** via `--memory`, `--cpu-quota`, `--pids-limit`
 - **Custom images** — use `--image` or set `sandbox.image` in config to bring your own toolchain
 
@@ -61,6 +64,12 @@ The backend is selected automatically (`--backend auto` is the default):
 After the agent exits, `cbox diff` shows exactly what changed. `cbox merge` applies your approved changes to the real filesystem. Everything else is discarded.
 
 ## Install
+
+### Pre-built binaries
+
+Download from [GitHub Releases](https://github.com/borngraced/cbox/releases) — binaries are available for Linux and macOS.
+
+### From source
 
 ```
 cargo install --git https://github.com/borngraced/cbox cbox

@@ -153,14 +153,20 @@ impl ContainerBackend {
         // Always mount Claude Code config so sessions stay authenticated.
         // This runs regardless of the adapter since users may launch claude
         // interactively inside any session.
+        // - ~/.claude is rw so /login can persist credentials
+        // - ~/.claude.json is ro to prevent corruption from concurrent writes
         if !host_home.is_empty() {
-            for name in [".claude", ".claude.json"] {
-                let host_path = format!("{}/{}", host_home, name);
-                if std::path::Path::new(&host_path).exists()
-                    && !self.config.sandbox.rw_mounts.contains(&host_path)
-                {
-                    args.extend(["-v".to_string(), format!("{}:/root/{}:rw", host_path, name)]);
-                }
+            let claude_dir = format!("{}/{}", host_home, ".claude");
+            if std::path::Path::new(&claude_dir).exists()
+                && !self.config.sandbox.rw_mounts.contains(&claude_dir)
+            {
+                args.extend(["-v".to_string(), format!("{}:/root/.claude:rw", claude_dir)]);
+            }
+            let claude_json = format!("{}/{}", host_home, ".claude.json");
+            if std::path::Path::new(&claude_json).exists()
+                && !self.config.sandbox.rw_mounts.contains(&claude_json)
+            {
+                args.extend(["-v".to_string(), format!("{}:/root/.claude.json:ro", claude_json)]);
             }
         }
 
