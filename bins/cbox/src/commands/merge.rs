@@ -1,13 +1,12 @@
-use std::io::{self, BufRead, Write};
-
 use anyhow::{Context, Result};
 use colored::Colorize;
 
-use cbox_core::{CboxConfig, SessionStore};
+use cbox_core::CboxConfig;
 use cbox_diff::{DiffRenderer, FilePicker};
 use cbox_overlay::OverlayFs;
 
 use crate::filter;
+use crate::util;
 
 pub fn execute(
     pick: bool,
@@ -15,16 +14,7 @@ pub fn execute(
     dry_run: bool,
     session_query: Option<String>,
 ) -> Result<()> {
-    let session = match session_query {
-        Some(q) => SessionStore::find(&q).context("session not found")?,
-        None => {
-            let sessions = SessionStore::list_all()?;
-            sessions
-                .into_iter()
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("no sessions found"))?
-        }
-    };
+    let session = util::resolve_session(session_query)?;
 
     let config = CboxConfig::find_and_load(&session.project_dir)?;
     let overlay = OverlayFs::from_session(&session);
@@ -59,15 +49,12 @@ pub fn execute(
     }
 
     if !force {
-        print!(
-            "\nApply {} changes to {}? [y/N] ",
+        let prompt = format!(
+            "\nApply {} changes to {}?",
             changes_to_merge.len(),
             session.project_dir.display()
         );
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().lock().read_line(&mut input)?;
-        if !input.trim().eq_ignore_ascii_case("y") {
+        if !util::confirm(&prompt)? {
             println!("Aborted.");
             return Ok(());
         }

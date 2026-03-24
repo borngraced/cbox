@@ -22,9 +22,18 @@ pub fn dispatch(cli: Cli) -> Result<()> {
             backend,
             image,
             cmd,
-        } => run::execute(
-            adapter, persist, session, network, memory, cpu, dry_run, backend, image, cmd,
-        ),
+        } => run::execute(run::RunOptions {
+            adapter_name: adapter,
+            persist,
+            session_name: session,
+            network,
+            memory,
+            cpu,
+            dry_run,
+            backend,
+            image,
+            cmd,
+        }),
 
         Command::Diff {
             stat,

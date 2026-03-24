@@ -3,6 +3,8 @@ use std::process::Command;
 
 use tracing::{info, warn};
 
+use crate::error::CoreError;
+
 /// Detected system capabilities for sandbox features.
 #[derive(Debug, Clone)]
 pub struct Capabilities {
@@ -88,12 +90,14 @@ impl Capabilities {
             .unwrap_or(false)
     }
 
-    /// Ensure minimum requirements are met, return error message if not.
-    pub fn check_minimum(&self) -> Result<(), String> {
+    /// Ensure minimum requirements are met, return error if not.
+    pub fn check_minimum(&self) -> Result<(), CoreError> {
         if !self.user_namespaces {
-            return Err("User namespaces are not available. Enable with: \
+            return Err(CoreError::CapabilityMissing(
+                "User namespaces are not available. Enable with: \
                  sudo sysctl -w kernel.unprivileged_userns_clone=1"
-                .to_string());
+                    .to_string(),
+            ));
         }
         Ok(())
     }

@@ -4,6 +4,8 @@ use std::process::Command;
 use cbox_core::Session;
 use tracing::{debug, info, warn};
 
+pub use cbox_core::NetworkMode;
+
 use crate::error::NetworkError;
 
 /// Network configuration resolved from config + session.
@@ -13,12 +15,6 @@ pub struct NetworkConfig {
     pub allowed_hosts: Vec<ResolvedHost>,
     pub dns_servers: Vec<String>,
     pub subnet_index: u8,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum NetworkMode {
-    Deny,
-    Allow,
 }
 
 #[derive(Debug, Clone)]

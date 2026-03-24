@@ -4,8 +4,8 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 
 use cbox_core::capability::Capabilities;
-use cbox_core::{CboxConfig, Session, SessionStatus, SessionStore};
-use cbox_network::{NetworkConfig, NetworkMode, NetworkSetup};
+use cbox_core::{CboxConfig, NetworkMode, Session, SessionStatus, SessionStore};
+use cbox_network::{NetworkConfig, NetworkSetup};
 use cbox_overlay::OverlayFs;
 use nix::mount::{mount, MsFlags};
 use nix::sched::CloneFlags;
@@ -91,10 +91,7 @@ impl Sandbox {
         // Full cleanup happens via `cbox destroy`.
 
         let resolved_hosts = NetworkSetup::resolve_whitelist(&self.config.network.allow)?;
-        let net_mode = match self.config.network.mode.as_str() {
-            "allow" => NetworkMode::Allow,
-            _ => NetworkMode::Deny,
-        };
+        let net_mode = self.config.network.mode;
 
         let existing_sessions = SessionStore::list_all()?;
         let subnet_index = NetworkSetup::allocate_subnet_index(&existing_sessions);

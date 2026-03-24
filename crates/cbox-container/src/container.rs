@@ -32,9 +32,9 @@ ENV PATH="/root/.local/bin:${PATH}"
 
 /// Container-based sandbox backend (Docker/Podman).
 pub struct ContainerBackend {
-    pub session: Session,
-    pub config: CboxConfig,
-    pub runtime: ContainerRuntime,
+    session: Session,
+    config: CboxConfig,
+    runtime: ContainerRuntime,
 }
 
 impl ContainerBackend {
@@ -159,10 +159,7 @@ impl ContainerBackend {
                 if std::path::Path::new(&host_path).exists()
                     && !self.config.sandbox.rw_mounts.contains(&host_path)
                 {
-                    args.extend([
-                        "-v".to_string(),
-                        format!("{}:/root/{}:rw", host_path, name),
-                    ]);
+                    args.extend(["-v".to_string(), format!("{}:/root/{}:rw", host_path, name)]);
                 }
             }
         }
@@ -181,9 +178,9 @@ impl ContainerBackend {
             }
         }
 
-        match self.config.network.mode.as_str() {
-            "allow" => {} // default bridge
-            _ => {
+        match self.config.network.mode {
+            cbox_core::NetworkMode::Allow => {} // default bridge
+            cbox_core::NetworkMode::Deny => {
                 args.extend(["--network".to_string(), "none".to_string()]);
             }
         }

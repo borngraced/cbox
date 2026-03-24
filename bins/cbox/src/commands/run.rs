@@ -6,26 +6,28 @@ use cbox_adapter::AdapterRegistry;
 use cbox_container::{ContainerBackend, ContainerRuntime};
 #[cfg(target_os = "linux")]
 use cbox_core::capability::Capabilities;
-use cbox_core::{BackendKind, CboxConfig, SandboxBackend, Session, SessionStore};
+use cbox_core::{BackendKind, CboxConfig, NetworkMode, SandboxBackend, Session, SessionStore};
 #[cfg(target_os = "linux")]
 use cbox_sandbox::Sandbox;
 
-#[allow(clippy::too_many_arguments)]
-pub fn execute(
-    adapter_name: String,
-    persist: bool,
-    session_name: Option<String>,
-    network: String,
-    memory: Option<String>,
-    cpu: Option<String>,
-    dry_run: bool,
-    backend_str: String,
-    image: Option<String>,
-    cmd: Vec<String>,
-) -> Result<()> {
-    let backend_kind = select_backend(&backend_str, dry_run)?;
+/// Options for the `cbox run` command.
+pub struct RunOptions {
+    pub adapter_name: String,
+    pub persist: bool,
+    pub session_name: Option<String>,
+    pub network: String,
+    pub memory: Option<String>,
+    pub cpu: Option<String>,
+    pub dry_run: bool,
+    pub backend: String,
+    pub image: Option<String>,
+    pub cmd: Vec<String>,
+}
 
-    let cmd = if cmd.is_empty() {
+pub fn execute(opts: RunOptions) -> Result<()> {
+    let backend_kind = select_backend(&opts.backend)?;
+
+    let cmd = if opts.cmd.is_empty() {
         let shell = match backend_kind {
             // For containers, use a sentinel that the entrypoint resolves to the
             // image's $SHELL (set via ENV in Dockerfile), falling back to /bin/bash.
@@ -34,27 +36,28 @@ pub fn execute(
         };
         vec![shell]
     } else {
-        cmd
+        opts.cmd
     };
 
     let cwd = std::env::current_dir()?;
     let mut config = CboxConfig::find_and_load(&cwd)?;
 
-    config.network.mode = network;
-    if let Some(mem) = memory {
+    config.network.mode = opts
+        .network
+        .parse::<NetworkMode>()
+        .map_err(|e| anyhow::anyhow!(e))?;
+    if let Some(mem) = opts.memory {
         config.resources.memory = mem;
     }
-    if let Some(c) = cpu {
+    if let Some(c) = opts.cpu {
         config.resources.cpu = c;
     }
-    if let Some(img) = image {
+    if let Some(img) = opts.image {
         config.sandbox.image = img;
     }
 
     let registry = AdapterRegistry::new();
-    let adapter = registry
-        .resolve(&adapter_name, &cmd)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    let adapter = registry.resolve(&opts.adapter_name, &cmd)?;
 
     // Collect adapter mounts before validation so validate() sees the full config
     for mount in adapter.extra_ro_mounts() {
@@ -72,24 +75,18 @@ pub fn execute(
     // inside the container image, not on the host. The adapter's validate()
     // checks for host binaries which won't exist on macOS.
     if backend_kind != BackendKind::Container {
-        adapter
-            .validate(&config)
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        adapter.validate(&config)?;
     }
 
     let mut env = HashMap::new();
-    adapter
-        .prepare_env(&mut env, &config)
-        .map_err(|e| anyhow::anyhow!("{}", e))?;
+    adapter.prepare_env(&mut env, &config)?;
 
     // For container backend, tools are in the image on PATH — use the command
     // as-is without adapter resolution (which looks for host binaries).
     let full_cmd = if backend_kind == BackendKind::Container {
         cmd.clone()
     } else {
-        let sandbox_cmd = adapter
-            .build_command(&cmd, &config)
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
+        let sandbox_cmd = adapter.build_command(&cmd, &config)?;
 
         for (k, v) in sandbox_cmd.env {
             env.insert(k, v);
@@ -104,9 +101,9 @@ pub fn execute(
     SessionStore::ensure_dir()?;
     let session = Session::new(
         project_dir,
-        session_name,
+        opts.session_name,
         adapter.name().to_string(),
-        persist,
+        opts.persist,
         backend_kind,
     );
 
@@ -116,35 +113,31 @@ pub fn execute(
         session.display_name().cyan(),
         adapter.name(),
         backend_kind,
-        persist
+        opts.persist
     );
 
     let result = match backend_kind {
         #[cfg(target_os = "linux")]
         BackendKind::Native => {
             let caps = Capabilities::detect();
-            if !dry_run {
-                caps.check_minimum().map_err(|e| anyhow::anyhow!("{}", e))?;
+            if !opts.dry_run {
+                caps.check_minimum()?;
             }
             let sandbox = Sandbox::new(session, config, caps);
-            sandbox
-                .run(&full_cmd, env, dry_run)
-                .map_err(|e| anyhow::anyhow!("{}", e))?
+            sandbox.run(&full_cmd, env, opts.dry_run)?
         }
         #[cfg(not(target_os = "linux"))]
         BackendKind::Native => {
             anyhow::bail!("native backend is only available on Linux");
         }
         BackendKind::Container => {
-            let runtime = ContainerRuntime::detect().map_err(|e| anyhow::anyhow!("{}", e))?;
+            let runtime = ContainerRuntime::detect()?;
             let backend = ContainerBackend::new(session, config, runtime);
-            backend
-                .run(&full_cmd, env, dry_run)
-                .map_err(|e| anyhow::anyhow!("{}", e))?
+            backend.run(&full_cmd, env, opts.dry_run)?
         }
     };
 
-    if !dry_run {
+    if !opts.dry_run {
         println!(
             "\n{} session {} exited with code {}",
             "cbox".green().bold(),
@@ -164,7 +157,7 @@ pub fn execute(
     std::process::exit(result.exit_code);
 }
 
-fn select_backend(requested: &str, _dry_run: bool) -> Result<BackendKind> {
+fn select_backend(requested: &str) -> Result<BackendKind> {
     match requested {
         "native" => Ok(BackendKind::Native),
         "container" | "docker" | "podman" => Ok(BackendKind::Container),

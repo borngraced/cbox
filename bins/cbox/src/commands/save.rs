@@ -1,19 +1,12 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::Colorize;
 
 use cbox_core::{SessionStatus, SessionStore};
 
+use crate::util;
+
 pub fn execute(name: Option<String>, session_query: Option<String>) -> Result<()> {
-    let mut session = match session_query {
-        Some(q) => SessionStore::find(&q).context("session not found")?,
-        None => {
-            let sessions = SessionStore::list_all()?;
-            sessions
-                .into_iter()
-                .next()
-                .ok_or_else(|| anyhow::anyhow!("no sessions found"))?
-        }
-    };
+    let mut session = util::resolve_session(session_query)?;
 
     if let Some(n) = name {
         session.name = Some(n);

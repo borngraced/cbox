@@ -39,7 +39,7 @@ impl AgentAdapter for ClaudeCodeAdapter {
                 "claude binary not found in ~/.local/bin, /usr/local/bin, or /usr/bin".to_string(),
             ));
         }
-        if config.network.mode == "deny" {
+        if config.network.mode == cbox_core::NetworkMode::Deny {
             return Err(AdapterError::Validation(
                 "claude adapter requires network access. Use --network allow".to_string(),
             ));

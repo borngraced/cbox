@@ -86,11 +86,39 @@ fn default_ro_mounts() -> Vec<String> {
     ]
 }
 
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NetworkMode {
+    #[default]
+    Deny,
+    Allow,
+}
+
+impl std::fmt::Display for NetworkMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Deny => write!(f, "deny"),
+            Self::Allow => write!(f, "allow"),
+        }
+    }
+}
+
+impl std::str::FromStr for NetworkMode {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "deny" => Ok(Self::Deny),
+            "allow" => Ok(Self::Allow),
+            other => Err(format!("unknown network mode: {}", other)),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkConfig {
     /// Network mode: "deny" (default) or "allow"
-    #[serde(default = "default_network_mode")]
-    pub mode: String,
+    #[serde(default)]
+    pub mode: NetworkMode,
 
     /// Whitelisted hosts (only used when mode = "deny")
     #[serde(default)]
@@ -104,15 +132,11 @@ pub struct NetworkConfig {
 impl Default for NetworkConfig {
     fn default() -> Self {
         Self {
-            mode: default_network_mode(),
+            mode: NetworkMode::default(),
             allow: vec![],
             dns: default_dns(),
         }
     }
-}
-
-fn default_network_mode() -> String {
-    "deny".to_string()
 }
 
 fn default_dns() -> Vec<String> {
@@ -255,7 +279,7 @@ impl CboxConfig {
             self.sandbox.merge_exclude = other.sandbox.merge_exclude;
         }
 
-        if other.network.mode != default_network_mode() {
+        if other.network.mode != NetworkMode::default() {
             self.network.mode = other.network.mode;
         }
         if !other.network.allow.is_empty() {
@@ -337,7 +361,7 @@ mod tests {
     #[test]
     fn test_default_config() {
         let config = CboxConfig::default();
-        assert_eq!(config.network.mode, "deny");
+        assert_eq!(config.network.mode, NetworkMode::Deny);
         assert_eq!(config.resources.memory, "4G");
         assert_eq!(config.resources.max_pids, 4096);
     }

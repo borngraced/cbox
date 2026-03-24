@@ -1,26 +1,16 @@
-use std::io::{self, BufRead, Write};
-
-use anyhow::{Context, Result};
+use anyhow::Result;
 use colored::Colorize;
 
 use cbox_core::{BackendKind, SessionStore};
 use cbox_overlay::OverlayFs;
 
+use crate::util;
+
 pub fn execute(all: bool, force: bool, session_query: Option<String>) -> Result<()> {
     let sessions = if all {
         SessionStore::list_all()?
     } else {
-        let session = match session_query {
-            Some(q) => SessionStore::find(&q).context("session not found")?,
-            None => {
-                let sessions = SessionStore::list_all()?;
-                sessions
-                    .into_iter()
-                    .next()
-                    .ok_or_else(|| anyhow::anyhow!("no sessions found"))?
-            }
-        };
-        vec![session]
+        vec![util::resolve_session(session_query)?]
     };
 
     if sessions.is_empty() {
@@ -39,11 +29,8 @@ pub fn execute(all: bool, force: bool, session_query: Option<String>) -> Result<
             println!("  {} [{}]{}", s.display_name(), s.status, alive);
         }
 
-        print!("\nDestroy {} session(s)? [y/N] ", sessions.len());
-        io::stdout().flush()?;
-        let mut input = String::new();
-        io::stdin().lock().read_line(&mut input)?;
-        if !input.trim().eq_ignore_ascii_case("y") {
+        let prompt = format!("\nDestroy {} session(s)?", sessions.len());
+        if !util::confirm(&prompt)? {
             println!("Aborted.");
             return Ok(());
         }
