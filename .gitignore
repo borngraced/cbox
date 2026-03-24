@@ -1,3 +1,4 @@
 target/
+root/
 *.swp
 .DS_Store

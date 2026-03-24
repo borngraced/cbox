@@ -88,4 +88,16 @@ mod tests {
         assert!(glob_match(".viminfo", ".viminfo"));
         assert!(!glob_match(".viminfo", "root/.viminfo"));
     }
+
+    #[test]
+    fn test_glob_home_exclude() {
+        // home/** should match all user home artifacts from overlay diff
+        assert!(glob_match("home/**", "home/borngraced/.cache/claude-cli-nodejs/-/mcp-logs/test.jsonl"));
+        assert!(glob_match("home/**", "home/borngraced/.claude.json"));
+        assert!(glob_match("home/**", "home/borngraced/.npm/_logs/debug.log"));
+        assert!(glob_match("home/**", "home/user/.cache/keyring/control"));
+        // Should NOT match project files
+        assert!(!glob_match("home/**", "src/main.rs"));
+        assert!(!glob_match("home/**", "Cargo.toml"));
+    }
 }

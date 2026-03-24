@@ -28,6 +28,10 @@ pub struct SandboxConfig {
     #[serde(default)]
     pub overlay_dirs: Vec<String>,
 
+    /// Paths to bind-mount read-write (direct pass-through to host)
+    #[serde(default)]
+    pub rw_mounts: Vec<String>,
+
     /// Syscalls to additionally block (beyond default denylist)
     #[serde(default)]
     pub blocked_syscalls: Vec<String>,
@@ -41,6 +45,7 @@ impl Default for SandboxConfig {
     fn default() -> Self {
         Self {
             ro_mounts: default_ro_mounts(),
+            rw_mounts: vec![],
             overlay_dirs: vec![],
             blocked_syscalls: vec![],
             merge_exclude: default_merge_exclude(),
@@ -54,6 +59,7 @@ fn default_merge_exclude() -> Vec<String> {
         "root/.cache/**".to_string(),
         "root/.local/**".to_string(),
         "root/.config/**".to_string(),
+        "home/**".to_string(),
         ".bash_history".to_string(),
         ".viminfo".to_string(),
         ".lesshst".to_string(),
@@ -223,6 +229,9 @@ impl CboxConfig {
     fn merge(&mut self, other: Self) {
         if other.sandbox.ro_mounts != default_ro_mounts() {
             self.sandbox.ro_mounts = other.sandbox.ro_mounts;
+        }
+        if !other.sandbox.rw_mounts.is_empty() {
+            self.sandbox.rw_mounts = other.sandbox.rw_mounts;
         }
         if !other.sandbox.overlay_dirs.is_empty() {
             self.sandbox.overlay_dirs = other.sandbox.overlay_dirs;

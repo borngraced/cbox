@@ -129,21 +129,32 @@ impl Sandbox {
             .collect();
         let child_env = env.clone();
         let child_overlay = OverlayFs::from_session(&self.session);
-        let child_ro_mounts = self.config.sandbox.ro_mounts.clone();
+        let mut child_ro_mounts = self.config.sandbox.ro_mounts.clone();
+        // Bind-mount user's home .local into sandbox so tools like claude are available
+        // Resolve the real user's home — sudo changes HOME to /root
+        let host_home = cbox_core::util::real_user_home();
+        let host_local = format!("{}/.local", host_home);
+        if std::path::Path::new(&host_local).exists() && !child_ro_mounts.contains(&host_local) {
+            child_ro_mounts.push(host_local.clone());
+        }
+        let child_rw_mounts = self.config.sandbox.rw_mounts.clone();
+        let child_local_bin = format!("{}/.local/bin", host_home);
         let child_dns = self.config.network.dns.clone();
         let child_blocked_syscalls = self.config.sandbox.blocked_syscalls.clone();
         let child_subnet = subnet_index;
         let has_net_tools = self.capabilities.ip_command;
-        let child_project_dir = self.session.project_dir.clone();
+        let deny_network = net_mode == NetworkMode::Deny;
 
-        // Skip CLONE_NEWUSER when running as root — already have full privileges
         let mut clone_flags = CloneFlags::CLONE_NEWPID
             | CloneFlags::CLONE_NEWNS
-            | CloneFlags::CLONE_NEWNET
             | CloneFlags::CLONE_NEWUTS
             | CloneFlags::CLONE_NEWIPC;
         if !is_root {
             clone_flags |= CloneFlags::CLONE_NEWUSER;
+        }
+        // Only create a network namespace in deny mode — allow mode shares host network
+        if net_mode == NetworkMode::Deny {
+            clone_flags |= CloneFlags::CLONE_NEWNET;
         }
 
         match unsafe { unistd::fork() }? {
@@ -170,7 +181,8 @@ impl Sandbox {
                     Self::write_id_mappings(child_pid, uid.as_raw(), gid.as_raw())?;
                 }
 
-                if has_net_tools && net_mode != NetworkMode::Allow {
+                // Only set up veth/iptables in deny mode (allow mode shares host network)
+                if has_net_tools && net_mode == NetworkMode::Deny {
                     let veth_name = NetworkSetup::veth_host_name(&self.session.id);
                     match NetworkSetup::create_veth_pair(&veth_name, child_pid, subnet_index) {
                         Ok(()) => {
@@ -191,17 +203,20 @@ impl Sandbox {
                                     self.session.iptables_rules = rules.clone();
                                     cleanup.push("cleanup iptables", move || {
                                         let _ = NetworkSetup::cleanup_iptables(&rules);
+                                        NetworkSetup::release_ip_forward();
                                     });
                                 }
                                 Err(e) => warn!("iptables setup failed: {}", e),
                             }
                         }
-                        Err(e) => warn!("veth setup failed: {}", e),
+                        Err(e) => eprintln!("warning: veth setup failed: {}", e),
                     }
                 }
 
                 if let Some(ref cg) = cgroup_path {
-                    let _ = CgroupSetup::add_process(cg, child_pid);
+                    if let Err(e) = CgroupSetup::add_process(cg, child_pid) {
+                        eprintln!("warning: failed to add process to cgroup: {}", e);
+                    }
                 }
 
                 SessionStore::save(&self.session)?;
@@ -266,13 +281,16 @@ impl Sandbox {
                 // Second fork to be PID 1 in the new PID namespace
                 match unsafe { unistd::fork() }.unwrap() {
                     ForkResult::Parent { child } => {
-                        match waitpid(child, None) {
-                            Ok(WaitStatus::Exited(_, code)) => std::process::exit(code),
-                            _ => std::process::exit(1),
+                        loop {
+                            match waitpid(child, None) {
+                                Ok(WaitStatus::Exited(_, code)) => std::process::exit(code),
+                                Err(nix::errno::Errno::EINTR) => continue,
+                                _ => std::process::exit(1),
+                            }
                         }
                     }
                     ForkResult::Child => {
-                        if has_net_tools {
+                        if has_net_tools && deny_network {
                             if let Err(e) = NetworkSetup::configure_child_network(
                                 child_subnet,
                                 &child_dns,
@@ -284,10 +302,19 @@ impl Sandbox {
                         if let Err(e) = Self::setup_child_mounts(
                             &child_overlay,
                             &child_ro_mounts,
-                            &child_project_dir,
+                            &child_rw_mounts,
                         ) {
                             eprintln!("mount setup failed: {}", e);
                             std::process::exit(1);
+                        }
+
+                        // Write a working resolv.conf via bind mount.
+                        // After pivot_root, /etc is a read-only bind mount from the host.
+                        // On systems using systemd-resolved (e.g. Fedora), /etc/resolv.conf
+                        // is a symlink to /run/systemd/resolve/stub-resolv.conf, but /run
+                        // is not mounted in the sandbox, so the symlink is broken.
+                        if let Err(e) = Self::setup_resolv_conf(&child_dns) {
+                            warn!("resolv.conf setup failed (DNS may not work): {}", e);
                         }
 
                         let _ = nix::unistd::sethostname("cbox");
@@ -304,7 +331,8 @@ impl Sandbox {
                                 CString::new(format!("{}={}", k, v)).unwrap(),
                             );
                         }
-                        final_env.push(CString::new("PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin").unwrap());
+                        let path_val = format!("PATH={}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin", child_local_bin);
+                        final_env.push(CString::new(path_val).unwrap());
                         if final_env.iter().all(|e| !e.to_str().unwrap_or("").starts_with("HOME=")) {
                             final_env.push(CString::new("HOME=/root").unwrap());
                         }
@@ -358,7 +386,7 @@ impl Sandbox {
     fn setup_child_mounts(
         overlay: &OverlayFs,
         ro_mounts: &[String],
-        _project_dir: &Path,
+        rw_mounts: &[String],
     ) -> Result<(), SandboxError> {
         mount::<str, str, str, str>(
             None,
@@ -377,7 +405,15 @@ impl Sandbox {
             let source = Path::new(dir);
             let target = overlay.merged_dir.join(dir.trim_start_matches('/'));
             if source.exists() {
-                std::fs::create_dir_all(&target)?;
+                if source.is_file() {
+                    if let Some(parent) = target.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(&target, "")
+                        .map_err(|e| SandboxError::Mount(format!("create mount point {}: {}", dir, e)))?;
+                } else {
+                    std::fs::create_dir_all(&target)?;
+                }
                 mount(
                     Some(source),
                     &target,
@@ -397,6 +433,33 @@ impl Sandbox {
                 )
                 .map_err(|e| {
                     SandboxError::Mount(format!("remount ro {}: {}", dir, e))
+                })?;
+            }
+        }
+
+        // Bind-mount read-write paths (e.g. ~/.claude for adapter state)
+        for dir in rw_mounts {
+            let source = Path::new(dir);
+            let target = overlay.merged_dir.join(dir.trim_start_matches('/'));
+            if source.exists() {
+                if source.is_file() {
+                    if let Some(parent) = target.parent() {
+                        std::fs::create_dir_all(parent)?;
+                    }
+                    std::fs::write(&target, "")
+                        .map_err(|e| SandboxError::Mount(format!("create mount point {}: {}", dir, e)))?;
+                } else {
+                    std::fs::create_dir_all(&target)?;
+                }
+                mount(
+                    Some(source),
+                    &target,
+                    None::<&str>,
+                    MsFlags::MS_BIND | MsFlags::MS_REC,
+                    None::<&str>,
+                )
+                .map_err(|e| {
+                    SandboxError::Mount(format!("bind mount rw {}: {}", dir, e))
                 })?;
             }
         }
@@ -480,7 +543,61 @@ impl Sandbox {
         Ok(())
     }
 
-    /// Resolve a command name to an absolute path by searching PATH directories.
+    /// Ensure /etc/resolv.conf has working DNS config inside the sandbox.
+    /// On systemd systems (Fedora, Ubuntu), /etc/resolv.conf is a symlink
+    /// to /run/systemd/resolve/stub-resolv.conf. Since /run is not mounted
+    /// in the sandbox, the symlink is dangling. Fix: write a real file to
+    /// /tmp and bind-mount it over the broken path.
+    fn setup_resolv_conf(dns_servers: &[String]) -> Result<(), SandboxError> {
+        // If resolv.conf is already readable with nameserver entries, nothing to do
+        if std::fs::read_to_string("/etc/resolv.conf")
+            .map(|s| s.contains("nameserver"))
+            .unwrap_or(false)
+        {
+            return Ok(());
+        }
+
+        let content = if dns_servers.is_empty() {
+            "nameserver 8.8.8.8\nnameserver 8.8.4.4\n".to_string()
+        } else {
+            dns_servers
+                .iter()
+                .map(|s| format!("nameserver {}", s))
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        };
+
+        // /etc is a read-only bind mount, so we must temporarily remount it
+        // read-write to replace the dangling symlink with a real file that
+        // can serve as a bind mount target.
+        mount(
+            None::<&str>,
+            "/etc",
+            None::<&str>,
+            MsFlags::MS_BIND | MsFlags::MS_REMOUNT,
+            None::<&str>,
+        )
+        .map_err(|e| SandboxError::Mount(format!("remount /etc rw: {}", e)))?;
+
+        // Remove the dangling symlink and write the real resolv.conf
+        let _ = std::fs::remove_file("/etc/resolv.conf");
+        std::fs::write("/etc/resolv.conf", &content)
+            .map_err(|e| SandboxError::Mount(format!("write /etc/resolv.conf: {}", e)))?;
+
+        // Re-seal /etc as read-only
+        mount(
+            None::<&str>,
+            "/etc",
+            None::<&str>,
+            MsFlags::MS_BIND | MsFlags::MS_REMOUNT | MsFlags::MS_RDONLY,
+            None::<&str>,
+        )
+        .map_err(|e| SandboxError::Mount(format!("remount /etc ro: {}", e)))?;
+
+        Ok(())
+    }
+
     fn resolve_command(cmd: &CString) -> Option<CString> {
         let cmd_str = cmd.to_str().ok()?;
         if cmd_str.starts_with('/') {

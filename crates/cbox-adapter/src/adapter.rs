@@ -36,6 +36,17 @@ pub trait AgentAdapter: Send + Sync {
         config: &CboxConfig,
     ) -> Result<SandboxCommand, AdapterError>;
 
+    /// Additional directories to bind-mount read-only into the sandbox.
+    /// Adapters can use this to expose tool-specific config directories.
+    fn extra_ro_mounts(&self) -> Vec<String> {
+        vec![]
+    }
+
+    /// Additional paths to bind-mount read-write into the sandbox.
+    fn extra_rw_mounts(&self) -> Vec<String> {
+        vec![]
+    }
+
     /// Called after the agent process exits.
     fn post_run(
         &self,

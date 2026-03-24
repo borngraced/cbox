@@ -46,6 +46,18 @@ pub fn execute(
         .resolve(&adapter_name, &cmd)
         .map_err(|e| anyhow::anyhow!("{}", e))?;
 
+    // Collect adapter mounts before validation so validate() sees the full config
+    for mount in adapter.extra_ro_mounts() {
+        if !config.sandbox.ro_mounts.contains(&mount) {
+            config.sandbox.ro_mounts.push(mount);
+        }
+    }
+    for mount in adapter.extra_rw_mounts() {
+        if !config.sandbox.rw_mounts.contains(&mount) {
+            config.sandbox.rw_mounts.push(mount);
+        }
+    }
+
     adapter
         .validate(&config)
         .map_err(|e| anyhow::anyhow!("{}", e))?;

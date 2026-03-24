@@ -118,8 +118,14 @@ impl OverlayFs {
                 .map_err(|e| OverlayError::Diff(e.to_string()))?
                 .to_path_buf();
 
-            if rel_path.starts_with(".wh.") && entry.file_type().is_dir() {
-                continue;
+            // Skip .wh.* directories, but NOT .wh..wh..opq (opaque dir sentinel)
+            // which is checked later by is_opaque_dir()
+            if entry.file_type().is_dir() {
+                if let Some(name) = rel_path.file_name().and_then(|n| n.to_str()) {
+                    if name.starts_with(".wh.") && name != ".wh..wh..opq" {
+                        continue;
+                    }
+                }
             }
 
             let lower_path = self.lower_dir.join(&rel_path);

@@ -64,7 +64,8 @@ impl NetworkSetup {
 
     /// Generate the veth interface name for a session.
     pub fn veth_host_name(session_id: &str) -> String {
-        format!("cbox_{}", &session_id[..6.min(session_id.len())])
+        let prefix: String = session_id.chars().take(6).collect();
+        format!("cbox_{}", prefix)
     }
 
     /// Create veth pair and move one end into the child's network namespace.
@@ -73,22 +74,28 @@ impl NetworkSetup {
         child_pid: u32,
         subnet_index: u8,
     ) -> Result<(), NetworkError> {
-        let peer_name = "eth0";
+        // Use a temp name for the peer to avoid conflicts with host interfaces
+        let peer_tmp = format!("{}_p", host_name);
         let host_ip = format!("10.200.{}.1/30", subnet_index);
-        let _peer_ip = format!("10.200.{}.2/30", subnet_index);
 
         run_cmd("ip", &[
-            "link", "add", host_name, "type", "veth", "peer", "name", peer_name,
+            "link", "add", host_name, "type", "veth", "peer", "name", &peer_tmp,
         ])?;
+        // Move peer into child's netns, then rename to eth0 inside
         run_cmd("ip", &[
-            "link", "set", peer_name, "netns", &child_pid.to_string(),
+            "link", "set", &peer_tmp, "netns", &child_pid.to_string(),
+        ])?;
+        // Rename inside the child's netns
+        run_cmd("nsenter", &[
+            &format!("--net=/proc/{}/ns/net", child_pid),
+            "ip", "link", "set", &peer_tmp, "name", "eth0",
         ])?;
         run_cmd("ip", &["addr", "add", &host_ip, "dev", host_name])?;
         run_cmd("ip", &["link", "set", host_name, "up"])?;
 
         info!(
-            "veth pair created: {} (host) <-> {} (sandbox pid {})",
-            host_name, peer_name, child_pid
+            "veth pair created: {} (host) <-> eth0 (sandbox pid {})",
+            host_name, child_pid
         );
         Ok(())
     }
@@ -113,6 +120,77 @@ impl NetworkSetup {
 
         info!("child network configured: ip={}, gw={}", ip, gateway);
         Ok(())
+    }
+
+    /// Enable IP forwarding with reference counting.
+    ///
+    /// Multiple concurrent cbox sessions may each need ip_forward=1. We save
+    /// the original value on first enable and track how many sessions hold a
+    /// reference. Only when the last session releases does the original value
+    /// get restored.
+    ///
+    /// State files live in the cbox data dir alongside sessions:
+    ///   ip_forward.orig  — original value before cbox touched it
+    ///   ip_forward.count — number of active sessions using forwarding
+    pub fn enable_ip_forward() {
+        let dir = Self::ip_forward_state_dir();
+        let _ = std::fs::create_dir_all(&dir);
+        let orig_path = dir.join("ip_forward.orig");
+        let count_path = dir.join("ip_forward.count");
+
+        // Save original value only if this is the first session
+        if !orig_path.exists() {
+            if let Ok(val) = std::fs::read_to_string("/proc/sys/net/ipv4/ip_forward") {
+                let _ = std::fs::write(&orig_path, val.trim());
+            }
+        }
+
+        // Increment reference count
+        let count = std::fs::read_to_string(&count_path)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .unwrap_or(0);
+        let _ = std::fs::write(&count_path, (count + 1).to_string());
+
+        if let Err(e) = std::fs::write("/proc/sys/net/ipv4/ip_forward", "1") {
+            eprintln!("warning: failed to enable IP forwarding: {}", e);
+        }
+    }
+
+    /// Release one reference to IP forwarding. When the last reference is
+    /// released, restore the original value.
+    pub fn release_ip_forward() {
+        let dir = Self::ip_forward_state_dir();
+        let orig_path = dir.join("ip_forward.orig");
+        let count_path = dir.join("ip_forward.count");
+
+        let count = std::fs::read_to_string(&count_path)
+            .ok()
+            .and_then(|s| s.trim().parse::<u32>().ok())
+            .unwrap_or(1);
+
+        if count <= 1 {
+            // Last session — restore original value and clean up state files
+            if let Ok(orig) = std::fs::read_to_string(&orig_path) {
+                if let Err(e) = std::fs::write("/proc/sys/net/ipv4/ip_forward", orig.trim()) {
+                    eprintln!("warning: failed to restore IP forwarding: {}", e);
+                }
+            }
+            let _ = std::fs::remove_file(&orig_path);
+            let _ = std::fs::remove_file(&count_path);
+        } else {
+            let _ = std::fs::write(&count_path, (count - 1).to_string());
+        }
+    }
+
+    fn ip_forward_state_dir() -> std::path::PathBuf {
+        let data_dir = std::env::var("XDG_DATA_HOME")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+                std::path::PathBuf::from(home).join(".local/share")
+            });
+        data_dir.join("cbox")
     }
 
     /// Apply iptables rules for the sandbox.
@@ -177,7 +255,7 @@ impl NetworkSetup {
         run_iptables_rule(&nat_rule)?;
         rules.push(nat_rule);
 
-        let _ = std::fs::write("/proc/sys/net/ipv4/ip_forward", "1");
+        Self::enable_ip_forward();
 
         info!("iptables: {} rules applied for {}", rules.len(), host_veth);
         Ok(rules)
@@ -252,6 +330,12 @@ mod tests {
     fn test_veth_name() {
         assert_eq!(NetworkSetup::veth_host_name("abcdef12"), "cbox_abcdef");
         assert_eq!(NetworkSetup::veth_host_name("ab"), "cbox_ab");
+        // Empty and exact-6 edge cases
+        assert_eq!(NetworkSetup::veth_host_name(""), "cbox_");
+        assert_eq!(NetworkSetup::veth_host_name("abcdef"), "cbox_abcdef");
+        assert_eq!(NetworkSetup::veth_host_name("a"), "cbox_a");
+        // Full UUID-style input
+        assert_eq!(NetworkSetup::veth_host_name("550e8400-e29b-41d4-a716-446655440000"), "cbox_550e84");
     }
 
     #[test]
