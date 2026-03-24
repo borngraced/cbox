@@ -79,3 +79,57 @@ jobs:
         with:
           generate_release_notes: true
           files: artifacts/*.tar.gz
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          SHA_AARCH64_MACOS=$(sha256sum artifacts/cbox-aarch64-macos.tar.gz | cut -d' ' -f1)
+          SHA_X86_64_MACOS=$(sha256sum artifacts/cbox-x86_64-macos.tar.gz | cut -d' ' -f1)
+          SHA_AARCH64_LINUX=$(sha256sum artifacts/cbox-aarch64-linux.tar.gz | cut -d' ' -f1)
+          SHA_X86_64_LINUX=$(sha256sum artifacts/cbox-x86_64-linux.tar.gz | cut -d' ' -f1)
+
+          cat > Formula/cbox.rb << FORMULA
+          class Cbox < Formula
+            desc "OS-level sandboxing for AI agents and arbitrary commands"
+            homepage "https://github.com/borngraced/cbox"
+            version "${VERSION}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/borngraced/cbox/releases/download/v#{version}/cbox-aarch64-macos.tar.gz"
+                sha256 "${SHA_AARCH64_MACOS}"
+              else
+                url "https://github.com/borngraced/cbox/releases/download/v#{version}/cbox-x86_64-macos.tar.gz"
+                sha256 "${SHA_X86_64_MACOS}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/borngraced/cbox/releases/download/v#{version}/cbox-aarch64-linux.tar.gz"
+                sha256 "${SHA_AARCH64_LINUX}"
+              else
+                url "https://github.com/borngraced/cbox/releases/download/v#{version}/cbox-x86_64-linux.tar.gz"
+                sha256 "${SHA_X86_64_LINUX}"
+              end
+            end
+
+            def install
+              bin.install "cbox"
+            end
+
+            test do
+              assert_match "cbox", shell_output("#{bin}/cbox --version")
+            end
+          end
+          FORMULA
+
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' Formula/cbox.rb
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/cbox.rb
+          git commit -m "Update Homebrew formula to v${VERSION}"
+          git push origin HEAD:main
