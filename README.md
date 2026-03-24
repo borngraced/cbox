@@ -49,7 +49,6 @@ cbox has two backends that provide the same isolation guarantees:
 - **Docker or Podman** — auto-detected, no configuration needed
 - **Auto-built base image** — on first run, cbox builds a `cbox-base` image with common tools (bash, zsh, fish, git, vim, curl, build-essential) and **Claude Code** pre-installed
 - **OverlayFS via tmpfs** — uses a tmpfs-backed overlay inside the container; falls back to copy-based isolation on macOS (virtiofs incompatibility)
-- **Claude Code auth persists** — `~/.claude` and `~/.claude.json` are automatically mounted into the container, so you never need to re-login
 - **`--network=none`** for deny mode, default bridge for allow mode
 - **Resource limits** via `--memory`, `--cpu-quota`, `--pids-limit`
 - **Custom images** — use `--image` or set `sandbox.image` in config to bring your own toolchain
@@ -67,7 +66,8 @@ After the agent exits, `cbox diff` shows exactly what changed. `cbox merge` appl
 cargo install --git https://github.com/borngraced/cbox cbox
 ```
 
-### System requirements
+<details>
+<summary>System requirements</summary>
 
 #### Linux (native backend)
 | Feature | Requirement | Fallback |
@@ -82,6 +82,8 @@ cargo install --git https://github.com/borngraced/cbox cbox
 |---|---|
 | Container runtime | Docker Desktop, OrbStack, or Podman |
 
+</details>
+
 ## Usage
 
 ```
@@ -93,11 +95,14 @@ cbox save [--name NAME] [SESSION] # snapshot session
 cbox list [--json]                # list sessions
 ```
 
-### Persistence
+<details>
+<summary>Persistence</summary>
 
 By default, sessions are one-shot: run a command, review changes with `cbox diff`, apply them with `cbox merge`, then clean up with `cbox destroy`.
 
 With `--persist`, the session's overlay data is kept after exit so you can re-enter it later, compare multiple sessions side by side, or snapshot it with `cbox save`.
+
+</details>
 
 ### Examples
 
@@ -128,7 +133,8 @@ cbox merge --pick
 cbox destroy
 ```
 
-### Custom container image
+<details>
+<summary>Custom container image</summary>
 
 The default base image includes common tools and Claude Code. For a custom setup, use the included `Dockerfile` as a starting point:
 
@@ -144,7 +150,10 @@ cbox run --image cbox-dev --network allow
 # image = "cbox-dev"
 ```
 
-## Configuration
+</details>
+
+<details>
+<summary>Configuration</summary>
 
 cbox uses layered config resolution:
 
@@ -181,7 +190,10 @@ default = "auto"
 env_passthrough = ["ANTHROPIC_API_KEY"]
 ```
 
-## Adapters
+</details>
+
+<details>
+<summary>Adapters</summary>
 
 cbox ships two adapters that customize sandbox behavior for specific tools:
 
@@ -190,7 +202,10 @@ cbox ships two adapters that customize sandbox behavior for specific tools:
 
 Auto-detection: commands containing "claude" use the claude adapter, everything else uses generic.
 
-## Architecture
+</details>
+
+<details>
+<summary>Architecture</summary>
 
 ```
 bins/cbox/          CLI binary (clap, subcommand dispatch)
@@ -203,6 +218,8 @@ crates/
   cbox-adapter/     AgentAdapter trait, generic + claude adapters
   cbox-diff/        Colored diff rendering, interactive file picker
 ```
+
+</details>
 
 ## License
 
