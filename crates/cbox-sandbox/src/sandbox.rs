@@ -216,7 +216,7 @@ impl Sandbox {
                             });
 
                             let net_config = NetworkConfig {
-                                mode: net_mode.clone(),
+                                mode: net_mode,
                                 allowed_hosts: resolved_hosts,
                                 dns_servers: self.config.network.dns.clone(),
                                 subnet_index,
