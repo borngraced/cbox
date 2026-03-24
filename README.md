@@ -1,10 +1,12 @@
 # cbox
 
-Kernel-enforced sandboxing for AI agents. Run any agent with full shell access — filesystem, network, and process mutations are isolated via Linux namespaces. Nothing touches your real system until you approve.
+Contained Box — OS-level sandboxing for AI agents and arbitrary commands. Run anything with full shell access — filesystem, network, and process mutations are isolated. Nothing touches your real system until you approve.
+
+Works on **Linux** (native namespaces) and **macOS** (via Docker/Podman). Same CLI, same workflow.
 
 ```
 ~/downloads $ cbox run --network allow -- claude
-cbox session a3f7c012 (adapter: claude, persist: false)
+cbox session a3f7c012 (adapter: claude, backend: native, persist: false)
 
 > clean up this directory — delete duplicates, organize files by type,
   remove anything over 6 months old
@@ -34,19 +36,29 @@ claude: I'll reorganize your downloads folder...
 
 ## How it works
 
-cbox creates an isolated environment using Linux kernel primitives:
+cbox has two backends that provide the same isolation guarantees:
 
+### Native backend (Linux)
 - **User/PID/mount/network/UTS/IPC namespaces** via `unshare(2)` — the agent runs as fakeroot in its own process tree
 - **OverlayFS** — project files appear read-write inside the sandbox, but all writes go to a separate upper layer
 - **Seccomp-BPF** — blocks `mount`, `ptrace`, `bpf`, `kexec_load`, and other escape vectors
 - **Cgroups v2** — enforces memory, CPU, and PID limits
 - **Network isolation** — deny-all by default with explicit host:port whitelist via veth pairs and iptables
 
+### Container backend (macOS, Linux fallback)
+- **Docker or Podman** — auto-detected, no configuration needed
+- **OverlayFS inside container** — same upper-dir strategy, so `cbox diff` and `cbox merge` work identically
+- **`--network=none`** for deny mode, default bridge for allow mode
+- **Resource limits** via `--memory`, `--cpu-quota`, `--pids-limit`
+
+The backend is selected automatically (`--backend auto` is the default):
+- Linux with user namespaces → native
+- Linux without namespaces → container (fallback)
+- macOS → container
+
 After the agent exits, `cbox diff` shows exactly what changed. `cbox merge` applies your approved changes to the real filesystem. Everything else is discarded.
 
 ## Install
-
-Requires Linux with user namespace support (most distros since kernel 3.8).
 
 ```
 git clone https://github.com/borngraced/cbox
@@ -57,12 +69,18 @@ sudo cp target/release/cbox /usr/local/bin/
 
 ### System requirements
 
+#### Linux (native backend)
 | Feature | Requirement | Fallback |
 |---|---|---|
-| Sandboxing | User namespaces (`kernel.unprivileged_userns_clone=1`) | None (required) |
+| Sandboxing | User namespaces (`kernel.unprivileged_userns_clone=1`) | Container backend |
 | File isolation | OverlayFS (`CONFIG_OVERLAY_FS`) | fuse-overlayfs |
 | Resource limits | Cgroups v2 | Disabled with warning |
 | Network rules | `iptables` + `ip` | Empty netns (no connectivity) |
+
+#### macOS (container backend)
+| Feature | Requirement |
+|---|---|
+| Container runtime | Docker Desktop, OrbStack, or Podman |
 
 ## Usage
 
@@ -90,6 +108,9 @@ cbox run --network allow -- claude
 # Named persistent session with resource limits
 cbox run --session experiment --persist --memory 2G --cpu 100% -- bash
 
+# Force container backend on Linux
+cbox run --backend container -- npm start
+
 # Review and selectively apply changes
 cbox diff --stat
 cbox merge --pick
@@ -115,6 +136,7 @@ merge_exclude = [
     "root/.cache/**",
     "root/.local/**",
     "root/.config/**",
+    "home/**",
 ]
 
 [network]
@@ -137,7 +159,7 @@ env_passthrough = ["ANTHROPIC_API_KEY"]
 cbox ships two adapters that customize sandbox behavior for specific tools:
 
 - **generic** — pass-through, runs the command as-is
-- **claude** — sets `ANTHROPIC_API_KEY`, `HOME`, `CLAUDE_CODE_SANDBOX=cbox`
+- **claude** — resolves the Claude binary, sets `ANTHROPIC_API_KEY`, `HOME`, `CLAUDE_CODE_SANDBOX=cbox`, bind-mounts `~/.claude` read-write
 
 Auto-detection: commands containing "claude" use the claude adapter, everything else uses generic.
 
@@ -146,8 +168,9 @@ Auto-detection: commands containing "claude" use the claude adapter, everything 
 ```
 bins/cbox/          CLI binary (clap, subcommand dispatch)
 crates/
-  cbox-core/        Config, session store, capability detection
-  cbox-sandbox/     Namespace setup, seccomp-BPF, cgroups v2
+  cbox-core/        Config, session store, capability detection, SandboxBackend trait
+  cbox-sandbox/     Native backend: namespace setup, seccomp-BPF, cgroups v2
+  cbox-container/   Container backend: Docker/Podman runtime detection
   cbox-overlay/     OverlayFS mount/diff/merge, whiteout detection
   cbox-network/     Veth pairs, iptables rules, DNS
   cbox-adapter/     AgentAdapter trait, generic + claude adapters
