@@ -34,10 +34,15 @@ impl AgentAdapter for ClaudeCodeAdapter {
         "claude"
     }
 
-    fn validate(&self, _config: &CboxConfig) -> Result<(), AdapterError> {
+    fn validate(&self, config: &CboxConfig) -> Result<(), AdapterError> {
         if Self::find_claude_binary().is_none() {
             return Err(AdapterError::Validation(
                 "claude binary not found in ~/.local/bin, /usr/local/bin, or /usr/bin".to_string(),
+            ));
+        }
+        if config.network.mode == "deny" {
+            return Err(AdapterError::Validation(
+                "claude adapter requires network access. Use --network allow".to_string(),
             ));
         }
         Ok(())
