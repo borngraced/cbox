@@ -179,7 +179,11 @@ impl ContainerBackend {
         }
 
         match self.config.network.mode {
-            cbox_core::NetworkMode::Allow => {} // default bridge
+            cbox_core::NetworkMode::Allow => {
+                // Use host network so OAuth callbacks (localhost) work between
+                // the host browser and the container's login server.
+                args.extend(["--network".to_string(), "host".to_string()]);
+            }
             cbox_core::NetworkMode::Deny => {
                 args.extend(["--network".to_string(), "none".to_string()]);
             }
