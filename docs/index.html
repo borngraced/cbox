@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>cbox — OS-level sandboxing for AI agents</title>
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <style>
+    body { max-width: 680px; margin: 40px auto; padding: 0 20px; font-size: 17px; line-height: 1.6; }
+    pre { background: #f5f5f5; padding: 12px; overflow-x: auto; border: 1px solid #ddd; }
+    code { background: #f5f5f5; padding: 2px 5px; }
+    pre code { background: none; padding: 0; }
+    img { max-width: 100%; }
+    hr { border: none; border-top: 1px solid #ccc; margin: 32px 0; }
+  </style>
+</head>
+<body>
+
+<h1>cbox</h1>
+
+<p><i>OS-level sandboxing for AI agents and arbitrary commands.</i></p>
+
+<p>Run anything with full shell access. All filesystem mutations are captured. Nothing touches your real system until you approve.</p>
+
+<p>Works on <b>Linux</b> (native namespaces) and <b>macOS</b> (Docker/Podman). MIT Licensed.</p>
+
+<hr>
+
+<h2>Demo</h2>
+
+<p><img src="../demo.gif" alt="cbox demo"></p>
+
+<hr>
+
+<h2>How it works</h2>
+
+<ol>
+  <li><code>cbox run</code> — Launch an isolated sandbox. Let Claude Code reorganize, refactor, or clean up your project.</li>
+  <li><code>cbox diff</code> — See exactly what the agent changed. Every file added, modified, or deleted.</li>
+  <li><code>cbox merge --pick</code> — Cherry-pick which changes to keep. Discard the rest.</li>
+</ol>
+
+<hr>
+
+<h2>Features</h2>
+
+<ul>
+  <li><b>Kernel-level isolation</b> — Linux: namespaces, overlayfs, seccomp-BPF, cgroups v2. macOS: Docker/Podman with auto-built base image.</li>
+  <li><b>Diff/Merge workflow</b> — OverlayFS captures only what changed. Review a clean diff, then selectively apply modifications.</li>
+  <li><b>Network deny-by-default</b> — No network access unless you say so. Whitelist specific hosts and ports.</li>
+  <li><b>Claude Code built-in</b> — Pre-installed in the container image. Just <code>cbox run --network allow</code>.</li>
+</ul>
+
+<hr>
+
+<h2>Install</h2>
+
+<h3>Homebrew</h3>
+<pre><code>brew tap borngraced/cbox && brew install cbox</code></pre>
+
+<h3>Cargo</h3>
+<pre><code>cargo install --git https://github.com/borngraced/cbox cbox</code></pre>
+
+<h3>Binaries</h3>
+<p>Download from <a href="https://github.com/borngraced/cbox/releases">GitHub Releases</a>.</p>
+
+<hr>
+
+<p><a href="https://github.com/borngraced/cbox">GitHub</a> &middot; MIT License</p>
+
+</body>
+</html>
