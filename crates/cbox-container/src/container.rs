@@ -166,7 +166,10 @@ impl ContainerBackend {
             if std::path::Path::new(&claude_json).exists()
                 && !self.config.sandbox.rw_mounts.contains(&claude_json)
             {
-                args.extend(["-v".to_string(), format!("{}:/root/.claude.json:ro", claude_json)]);
+                args.extend([
+                    "-v".to_string(),
+                    format!("{}:/root/.claude.json:ro", claude_json),
+                ]);
             }
         }
 
