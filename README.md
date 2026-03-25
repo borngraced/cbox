@@ -239,6 +239,19 @@ crates/
 
 </details>
 
+## Roadmap
+
+- [ ] Integration tests for container backend
+- [ ] `cbox enter` — re-enter a stopped session
+- [ ] `cbox log` — view session activity
+- [ ] Signal handling — clean up orphaned containers on Ctrl+C
+- [ ] Stream-based sync for large projects (avoid full copy on macOS)
+- [ ] Surface overlay sync errors instead of swallowing silently
+- [ ] Reliable session cleanup on macOS
+- [ ] Label macOS container backend as experimental
+- [ ] Real demo recording (not simulated)
+- [ ] Custom base image registry (pull pre-built instead of building locally)
+
 ## License
 
 MIT
